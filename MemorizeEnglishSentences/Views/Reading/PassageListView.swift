@@ -21,8 +21,8 @@ struct PassageListView: View {
     @State private var isSelecting = false
     @State private var selection = Set<PersistentIdentifier>()
     @State private var scrollProxy: ScrollViewProxy?
-    /// 英文チェックの結果(nil = 未実施)。ブロックごとの不自然な語の集合
-    @State private var suspiciousByBlock: [PersistentIdentifier: Set<String>]?
+    /// 英文チェックの結果(nil = 未実施)。ブロックごとの指摘内容
+    @State private var issuesByBlock: [PersistentIdentifier: SentenceIssues]?
 
     private var blocks: [Block] {
         passages.flatMap { $0.orderedBlocks }
@@ -206,7 +206,8 @@ struct PassageListView: View {
                 onWordTap: { word in
                     showWord(word)
                 },
-                suspiciousWords: suspiciousByBlock?[block.persistentModelID] ?? []
+                suspiciousWords: issuesByBlock?[block.persistentModelID]?.suspiciousWords ?? [],
+                issueNotes: issuesByBlock?[block.persistentModelID]?.notes ?? []
             )
             .allowsHitTesting(!isSelecting)
 
@@ -231,24 +232,24 @@ struct PassageListView: View {
 
     /// チェックボタンの色: 未実施=通常色 / 問題あり=オレンジ / 問題なし=緑
     private var checkButtonColor: Color {
-        guard let checked = suspiciousByBlock else { return .accentColor }
+        guard let checked = issuesByBlock else { return .accentColor }
         return checked.isEmpty ? .green : .orange
     }
 
-    /// 英文チェックの実行/解除。不自然な語をオレンジ表示する
+    /// 英文チェックの実行/解除。スペルに加えて重複語・a/an・句読点なども検査する
     private func toggleSentenceCheck() {
-        if suspiciousByBlock != nil {
-            withAnimation { suspiciousByBlock = nil }
+        if issuesByBlock != nil {
+            withAnimation { issuesByBlock = nil }
             return
         }
-        var result: [PersistentIdentifier: Set<String>] = [:]
+        var result: [PersistentIdentifier: SentenceIssues] = [:]
         for block in blocks {
-            let words = SentenceValidator.misspelledWords(in: block.englishText)
-            if !words.isEmpty {
-                result[block.persistentModelID] = Set(words.map { $0.lowercased() })
+            let issues = SentenceChecker.check(block.englishText)
+            if !issues.isEmpty {
+                result[block.persistentModelID] = issues
             }
         }
-        withAnimation { suspiciousByBlock = result }
+        withAnimation { issuesByBlock = result }
     }
 
     /// 単語の意味を表示: 内蔵辞書 → キャッシュ → Apple 翻訳の順で解決

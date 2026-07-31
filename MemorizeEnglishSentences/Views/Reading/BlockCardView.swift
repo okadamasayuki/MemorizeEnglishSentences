@@ -11,6 +11,8 @@ struct BlockCardView: View {
     let onWordTap: (String) -> Void
     /// 英文チェックで不自然と判定された語(オレンジで表示)
     var suspiciousWords: Set<String> = []
+    /// 英文チェックの指摘(文頭の小文字・句読点など、単語に紐づかないもの)
+    var issueNotes: [String] = []
 
     private var tokens: [WordToken] {
         WordTokenizer.tokenize(block.englishText)
@@ -89,6 +91,12 @@ struct BlockCardView: View {
                 }
             }
 
+            if !issueNotes.isEmpty {
+                Text(issueNotes.joined(separator: " / "))
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+
             if isExpanded {
                 Text(block.japaneseText ?? "(未翻訳 — ネットワークまたは言語データを確認してください)")
                     .font(.subheadline)
@@ -100,8 +108,10 @@ struct BlockCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                // チェックで不自然な語があるカードはうっすらオレンジ
-                .fill(suspiciousWords.isEmpty ? Color(.secondarySystemBackground) : Color.orange.opacity(0.13))
+                // チェックで指摘があるカードはうっすらオレンジ
+                .fill(suspiciousWords.isEmpty && issueNotes.isEmpty
+                    ? Color(.secondarySystemBackground)
+                    : Color.orange.opacity(0.13))
         )
         .contentShape(RoundedRectangle(cornerRadius: 12))
         .onTapGesture {
