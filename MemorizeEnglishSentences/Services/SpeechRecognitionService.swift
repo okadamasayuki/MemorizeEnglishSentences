@@ -8,6 +8,9 @@ import Speech
 @MainActor
 @Observable
 final class SpeechRecognitionService {
+    /// いずれかのインスタンスが録音中か(読み上げ側がセッションを切り替えてよいかの判定に使う)
+    nonisolated(unsafe) static var isAnyRecording = false
+
     var isRecording = false
     /// final になった確定テキスト(セグメント連結)
     var confirmedText = ""
@@ -74,10 +77,12 @@ final class SpeechRecognitionService {
         }
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
+            // .measurement は再生音量が絞られるため .default にする(認識品質は問題ない)
+            try session.setCategory(.playAndRecord, mode: .default, options: [.duckOthers, .defaultToSpeaker])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             try beginRecognition()
             isRecording = true
+            Self.isAnyRecording = true
         } catch {
             errorMessage = "録音を開始できませんでした: \(error.localizedDescription)"
             cleanup()
@@ -87,6 +92,7 @@ final class SpeechRecognitionService {
     func stop() {
         guard isRecording else { return }
         isRecording = false
+        Self.isAnyRecording = false
         request?.endAudio()
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
@@ -204,6 +210,7 @@ final class SpeechRecognitionService {
         task?.cancel()
         task = nil
         request = nil
+        Self.isAnyRecording = false
         if audioEngine.isRunning {
             audioEngine.stop()
         }

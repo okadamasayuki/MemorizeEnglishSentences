@@ -43,9 +43,10 @@ final class SpeechSynthesisService: NSObject, ObservableObject, AVSpeechSynthesi
 
     private func startUtterance(_ text: String, slow: Bool) {
         let session = AVAudioSession.sharedInstance()
-        // 録音(音声回答)中は playAndRecord のまま触らない。
-        // 録音中にカテゴリを playback に切り替えると失敗して無音になる。
-        if session.category != .playAndRecord {
+        // 実際に録音中のときだけ playAndRecord のまま触らない(切り替えると無音になる)。
+        // 録音していなければ、たとえ録音用の設定が残っていても
+        // 再生専用に切り替えてフル音量のスピーカーで鳴らす。
+        if !SpeechRecognitionService.isAnyRecording {
             try? session.setCategory(.playback, mode: .spokenAudio, options: [])
         }
         try? session.setActive(true, options: [])
