@@ -65,19 +65,21 @@ struct RecallSessionView: View {
 
             Divider()
 
-            VStack(spacing: 10) {
-                HStack(spacing: 12) {
-                    DictationButton(speech: speech, label: "音声で回答")
-                }
-
+            HStack(spacing: 44) {
+                Spacer()
+                // 音声で回答
+                DictationButton(speech: speech, iconOnly: true)
+                // 回答を確定して採点
                 Button {
                     confirmAnswer()
                 } label: {
-                    Text("回答を確定して採点")
-                        .frame(maxWidth: .infinity)
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 38))
+                        .foregroundStyle(currentAnswer.isEmpty ? Color(.systemGray3) : Color.green)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.borderless)
                 .disabled(currentAnswer.isEmpty)
+                Spacer()
             }
             .padding()
         }
