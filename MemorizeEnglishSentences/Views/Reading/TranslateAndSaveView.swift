@@ -57,24 +57,21 @@ struct TranslateAndSaveView: View {
                         save(withTranslations: true)
                     } label: {
                         Text("保存")
-                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 32)
                     }
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
                 } else {
                     Button {
                         startTranslation()
                     } label: {
                         Text(errorMessage == nil ? "翻訳を開始" : "翻訳を再試行")
-                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 16)
                     }
                     .buttonStyle(.borderedProminent)
-                }
-
-                if !isTranslating {
-                    Button("翻訳せずに保存") {
-                        save(withTranslations: false)
-                    }
-                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
                 }
             }
             .padding()
