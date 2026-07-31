@@ -13,9 +13,9 @@ struct RecallSessionView: View {
     @State private var resultAttempt: RecallAttempt?
     @State private var showResult = false
 
-    // ヒント: 英文の語順のまま単語ごとの和訳を並べる
+    // ヒント: 各単語の頭文字を並べ、タップするたびに先頭から 1 単語ずつ開く
     @State private var showHint = false
-    @State private var hintWords: [String] = []
+    @State private var hintRevealedCount = 0
 
     // 単語長押しで和訳+発音
     @State private var selectedWord: SelectedWord?
@@ -47,14 +47,34 @@ struct RecallSessionView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     if showHint {
-                        FlowLayout(spacing: 6, lineSpacing: 8) {
-                            ForEach(Array(hintWords.enumerated()), id: \.offset) { _, gloss in
-                                Text(gloss)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                        let tokens = WordTokenizer.tokenize(referenceText)
+                        FlowLayout(spacing: 5, lineSpacing: 8) {
+                            ForEach(tokens) { token in
+                                if token.id < hintRevealedCount {
+                                    Text(token.display)
+                                        .font(.body)
+                                } else {
+                                    Text(hintMask(token))
+                                        .font(.body)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 4)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .fill(Color(.secondarySystemBackground))
+                                        )
+                                }
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        // ヒント部分をタップするたびに次の 1 単語を開く
+                        .onTapGesture {
+                            if hintRevealedCount < tokens.count {
+                                withAnimation(.easeInOut(duration: 0.1)) {
+                                    hintRevealedCount += 1
+                                }
+                            }
+                        }
                     }
 
                     if showAnswer {
@@ -135,13 +155,13 @@ struct RecallSessionView: View {
         // 暗記中は下のタブバーを隠す
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
-            // ヒント(英文の語順で和訳を並べる)
+            // ヒント(頭文字の並び。タップで 1 単語ずつ開く)
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    if !showHint {
-                        buildHint()
-                    }
                     withAnimation(.easeInOut(duration: 0.15)) {
+                        if !showHint {
+                            hintRevealedCount = 0
+                        }
                         showHint.toggle()
                     }
                 } label: {
@@ -243,42 +263,10 @@ struct RecallSessionView: View {
         speech.fullText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// ヒント用: 英文の語順どおりに単語ごとの和訳を作る。
-    /// 内蔵辞書 → キャッシュの順で引く。冠詞や訳の見つからない語は
-    /// 英語のまま出さず、ヒントから省く(ヒントは日本語だけにする)。
-    private func buildHint() {
-        let skipWords: Set<String> = ["a", "an", "the"]
-        let tokens = WordTokenizer.tokenize(referenceText)
-        hintWords = tokens.compactMap { token in
-            let word = token.normalized.isEmpty ? token.display : token.normalized
-            if skipWords.contains(word.lowercased()) {
-                return nil
-            }
-            if let entry = BasicWordDictionary.lookup(word) {
-                return firstSense(entry)
-            }
-            let target = word
-            let descriptor = FetchDescriptor<WordCacheEntry>(
-                predicate: #Predicate { $0.word == target }
-            )
-            if let cached = try? context.fetch(descriptor).first, containsJapanese(cached.japanese) {
-                return firstSense(cached.japanese)
-            }
-            return nil
-        }
-    }
-
-    /// 日本語(かな・カナ・漢字)を含むか。英語のままのキャッシュをヒントに出さないための判定
-    private func containsJapanese(_ text: String) -> Bool {
-        text.unicodeScalars.contains { scalar in
-            (0x3040...0x30FF).contains(scalar.value)   // ひらがな・カタカナ
-                || (0x4E00...0x9FFF).contains(scalar.value) // 漢字
-        }
-    }
-
-    /// 「あれ・〜ということ」のような複数の意味からヒント用に最初の意味だけ取り出す
-    private func firstSense(_ entry: String) -> String {
-        entry.split(separator: "・").first.map(String.init) ?? entry
+    /// まだ開いていない単語のマスク表示(頭文字だけ見せる)
+    private func hintMask(_ token: WordToken) -> String {
+        guard let first = token.display.first else { return "…" }
+        return String(first) + "…"
     }
 
     /// 単語の意味を表示: 内蔵辞書 → キャッシュ → Apple 翻訳の順で解決
