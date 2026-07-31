@@ -1,56 +1,66 @@
 import SwiftData
 import SwiftUI
+import Translation
 
-/// 音読タブ。一覧を挟まず、いきなり読む画面(ReadingView)を表示する。
-/// 文章の切り替えは左上のメニューから。
+private struct SelectedWord: Identifiable {
+    let id = UUID()
+    let word: String
+}
+
+private struct SelectedSentence: Identifiable {
+    let id = UUID()
+    let sentence: String
+}
+
+/// 音読タブ。文章の分類はせず、登録したすべての英文ブロックを 1 画面に連続表示する。
 struct PassageListView: View {
+    @Environment(\.modelContext) private var context
     @Query(
         filter: #Predicate<Passage> { $0.purposeRaw == "reading" },
         sort: \Passage.createdAt, order: .reverse
     ) private var passages: [Passage]
-    @State private var showingAdd = false
-    @State private var selected: Passage?
 
-    private var currentPassage: Passage? {
-        if let selected, !selected.isDeleted, passages.contains(where: { $0 === selected }) {
-            return selected
-        }
-        return passages.first
+    @State private var showingAdd = false
+    @State private var expandedBlockIDs: Set<PersistentIdentifier> = []
+    @State private var selectedWord: SelectedWord?
+    @State private var selectedSentence: SelectedSentence?
+    @State private var retryConfiguration: TranslationSession.Configuration?
+
+    private var blocks: [Block] {
+        passages.flatMap { $0.orderedBlocks }
     }
 
     var body: some View {
         NavigationStack {
             Group {
-                if let passage = currentPassage {
-                    ReadingView(passage: passage)
-                } else {
+                if blocks.isEmpty {
                     ContentUnavailableView(
                         "英文がまだありません",
                         systemImage: "book",
                         description: Text("右上の + から英文を登録しましょう。音声入力でも写真でも OK です。")
                     )
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(blocks) { block in
+                                BlockCardView(
+                                    block: block,
+                                    isExpanded: expandedBlockIDs.contains(block.persistentModelID),
+                                    onToggle: { toggle(block) },
+                                    onWordTap: { word in
+                                        selectedWord = SelectedWord(word: word)
+                                    },
+                                    onLongPress: {
+                                        selectedSentence = SelectedSentence(sentence: block.englishText)
+                                    }
+                                )
+                            }
+                        }
+                        .padding()
+                    }
                 }
             }
             .toolbar {
-                if passages.count > 1 {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Menu {
-                            ForEach(passages) { passage in
-                                Button {
-                                    selected = passage
-                                } label: {
-                                    if passage === currentPassage {
-                                        Label(passage.title, systemImage: "checkmark")
-                                    } else {
-                                        Text(passage.title)
-                                    }
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "list.bullet")
-                        }
-                    }
-                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showingAdd = true
@@ -60,11 +70,64 @@ struct PassageListView: View {
                 }
             }
             .sheet(isPresented: $showingAdd, onDismiss: {
-                // 新しく追加した文章をすぐ表示する
-                selected = nil
+                startRetryTranslationIfNeeded()
             }) {
                 AddPassageView(purpose: .reading)
             }
+            .sheet(item: $selectedWord) { selected in
+                WordPopupView(word: selected.word)
+            }
+            .sheet(item: $selectedSentence) { selected in
+                SyntaxAnalysisView(sentence: selected.sentence)
+            }
+            // 未翻訳ブロックは表示時に再翻訳を試みる
+            .translationTask(retryConfiguration) { session in
+                await retryTranslations(with: session)
+            }
+            .onAppear {
+                startRetryTranslationIfNeeded()
+            }
+        }
+    }
+
+    private func toggle(_ block: Block) {
+        if expandedBlockIDs.contains(block.persistentModelID) {
+            expandedBlockIDs.remove(block.persistentModelID)
+        } else {
+            expandedBlockIDs.insert(block.persistentModelID)
+        }
+    }
+
+    private func startRetryTranslationIfNeeded() {
+        guard blocks.contains(where: { $0.japaneseText == nil }) else { return }
+        if retryConfiguration == nil {
+            retryConfiguration = TranslationSession.Configuration(
+                source: TranslationAvailability.english,
+                target: TranslationAvailability.japanese
+            )
+        } else {
+            retryConfiguration?.invalidate()
+        }
+    }
+
+    private func retryTranslations(with session: TranslationSession) async {
+        let untranslated = blocks.filter { $0.japaneseText == nil }
+        guard !untranslated.isEmpty else { return }
+        do {
+            try await session.prepareTranslation()
+            let requests = untranslated.enumerated().map { index, block in
+                TranslationSession.Request(sourceText: block.englishText, clientIdentifier: "\(index)")
+            }
+            for try await response in session.translate(batch: requests) {
+                if let identifier = response.clientIdentifier,
+                   let index = Int(identifier),
+                   index < untranslated.count {
+                    untranslated[index].japaneseText = response.targetText
+                }
+            }
+            try? context.save()
+        } catch {
+            // オフライン・言語データ未ダウンロード時は静かに諦める(次回表示時に再試行)
         }
     }
 }
