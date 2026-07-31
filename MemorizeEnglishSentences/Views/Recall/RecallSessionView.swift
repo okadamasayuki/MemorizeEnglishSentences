@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import Translation
 
 /// タイトルを見て英文全文を音声で回答、または「答えを見る」。
 /// タイトルはタップで編集でき、習熟ステータス(要復習/どちらでもない/覚えた!)を登録できる。
@@ -11,6 +12,13 @@ struct RecallSessionView: View {
     @State private var showAnswer = false
     @State private var resultAttempt: RecallAttempt?
     @State private var showResult = false
+
+    // 単語長押しで和訳+発音
+    @State private var selectedWord: SelectedWord?
+    @StateObject private var wordMeaning = WordMeaningModel()
+    @State private var wordBroker = WordTranslationBroker()
+    @State private var warmupRetryCount = 0
+    @State private var wordConfiguration: TranslationSession.Configuration?
 
     private var referenceText: String {
         passage.englishFullText
@@ -35,9 +43,19 @@ struct RecallSessionView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     if showAnswer {
-                        Text(referenceText)
-                            .font(.body)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        // 単語を長押しすると和訳の表示と発音の再生
+                        FlowLayout(spacing: 5, lineSpacing: 8) {
+                            ForEach(WordTokenizer.tokenize(referenceText)) { token in
+                                Text(token.display)
+                                    .font(.body)
+                                    .onLongPressGesture {
+                                        let word = token.normalized.isEmpty ? token.display : token.normalized
+                                        SpeechSynthesisService.shared.speak(word)
+                                        showWord(word)
+                                    }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     if !speech.fullText.isEmpty || speech.isRecording {
@@ -116,7 +134,53 @@ struct RecallSessionView: View {
                 RecallDiffView(attempt: resultAttempt)
             }
         }
+        .sheet(item: $selectedWord) { selected in
+            WordPopupView(word: selected.word, meaning: wordMeaning)
+        }
+        // 単語の翻訳(常駐セッション 1 本に、長押しされた単語をストリームで流し込む)
+        .translationTask(wordConfiguration) { session in
+            // ダミー翻訳でセッションの生存確認。起動直後は壊れたセッションに
+            // なることがあるため、その場合は少し待って作り直す。
+            do {
+                _ = try await translate(session, "hello", timeoutSeconds: 3)
+                warmupRetryCount = 0
+            } catch {
+                if warmupRetryCount < 8 {
+                    warmupRetryCount += 1
+                    try? await Task.sleep(for: .seconds(0.5))
+                    wordConfiguration?.invalidate()
+                    return
+                }
+            }
+
+            for await target in wordBroker.requests() {
+                do {
+                    let translated = try await translate(session, target, timeoutSeconds: 10)
+                    if selectedWord?.word == target {
+                        wordMeaning.japanese = translated
+                    }
+                    saveWordCache(target, translated)
+                } catch {
+                    // セッション不良の可能性があるので、作り直して 1 回だけ再翻訳
+                    if wordBroker.shouldRetry(target) {
+                        wordBroker.stashForRetry(target)
+                        wordConfiguration?.invalidate()
+                        return
+                    }
+                    if selectedWord?.word == target {
+                        wordMeaning.failed = true
+                    }
+                }
+            }
+        }
         .onAppear {
+            // 単語翻訳セッションを事前に確立しておく
+            if wordConfiguration == nil {
+                wordConfiguration = TranslationSession.Configuration(
+                    source: TranslationAvailability.english,
+                    target: TranslationAvailability.japanese
+                )
+            }
             // 長文ディクテーション: final 後に自動再開してセグメント連結
             speech.autoRestart = true
             // 正解英文の単語を認識バイアスとして渡し、正解に寄せて聞き取る
@@ -149,6 +213,40 @@ struct RecallSessionView: View {
 
     private var currentAnswer: String {
         speech.fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 単語の意味を表示: 内蔵辞書 → キャッシュ → Apple 翻訳の順で解決
+    private func showWord(_ word: String) {
+        wordMeaning.reset()
+        selectedWord = SelectedWord(word: word)
+
+        if let entry = BasicWordDictionary.lookup(word) {
+            wordMeaning.japanese = entry
+            return
+        }
+        let target = word
+        let descriptor = FetchDescriptor<WordCacheEntry>(
+            predicate: #Predicate { $0.word == target }
+        )
+        if let cached = try? context.fetch(descriptor).first {
+            wordMeaning.japanese = cached.japanese
+            return
+        }
+        wordBroker.request(word)
+    }
+
+    private func saveWordCache(_ word: String, _ translation: String) {
+        let target = word
+        let descriptor = FetchDescriptor<WordCacheEntry>(
+            predicate: #Predicate { $0.word == target }
+        )
+        if let existing = try? context.fetch(descriptor).first {
+            existing.japanese = translation
+            existing.updatedAt = .now
+        } else {
+            context.insert(WordCacheEntry(word: target, japanese: translation))
+        }
+        try? context.save()
     }
 
     private func confirmAnswer() {
