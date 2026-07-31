@@ -43,7 +43,14 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     }
 
     private lazy var englishVoice = Self.bestVoice(for: "en-US", preferPremium: false)
-    private lazy var japaneseVoice = Self.bestVoice(for: "ja-JP", preferPremium: true)
+    /// 日本語は Siri の声(O-ren)がいちばん聞き取りやすいので最優先。
+    /// なければ従来どおり品質の高い声にフォールバックする
+    private lazy var japaneseVoice: AVSpeechSynthesisVoice? = {
+        let siri = AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language == "ja-JP" && $0.identifier.contains("siri") }
+            .sorted { $0.quality.rawValue > $1.quality.rawValue }
+        return siri.first ?? Self.bestVoice(for: "ja-JP", preferPremium: true)
+    }()
 
     func toggleSpeed() {
         speedIndex = (speedIndex + 1) % 3

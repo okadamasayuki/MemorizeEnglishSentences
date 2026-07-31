@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import SwiftData
 
@@ -7,6 +8,23 @@ import SwiftData
 enum MacBridge {
     private static var documents: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
+    /// 端末にインストールされている読み上げボイスの一覧を書き出す(声の選定用)
+    static func exportVoices() {
+        let voices = AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language.hasPrefix("ja") || $0.language.hasPrefix("en-US") }
+            .map {
+                [
+                    "identifier": $0.identifier,
+                    "name": $0.name,
+                    "language": $0.language,
+                    "quality": String($0.quality.rawValue),
+                ]
+            }
+        if let data = try? JSONSerialization.data(withJSONObject: voices, options: [.prettyPrinted]) {
+            try? data.write(to: documents.appendingPathComponent("voices.json"))
+        }
     }
 
     /// 登録済み英文の書き出し(Claude Code がチェックに使う)
