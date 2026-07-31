@@ -12,9 +12,17 @@ struct WordPopupView: View {
     @State private var failed = false
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             Text(word)
                 .font(.title2.bold())
+
+            // 音声が聞けない場面用の読み方の目安
+            let pronunciation = KatakanaPronunciation.katakana(for: word)
+            if !pronunciation.isEmpty {
+                Text("読み方の目安: \(pronunciation)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
 
             Group {
                 if let japanese {
@@ -45,7 +53,7 @@ struct WordPopupView: View {
             .buttonStyle(.bordered)
         }
         .padding()
-        .presentationDetents([.height(220)])
+        .presentationDetents([.height(260)])
         .presentationDragIndicator(.visible)
         .task {
             loadFromCacheOrTranslate()
