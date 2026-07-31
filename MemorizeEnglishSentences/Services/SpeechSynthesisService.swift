@@ -20,6 +20,14 @@ final class SpeechSynthesisService: NSObject, ObservableObject, AVSpeechSynthesi
         synthesizer.delegate = self
     }
 
+    /// インストール済みの中で最も品質の高い英語の声を選ぶ
+    private lazy var englishVoice: AVSpeechSynthesisVoice? = {
+        let candidates = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == "en-US" }
+        return candidates.first { $0.quality == .premium }
+            ?? candidates.first { $0.quality == .enhanced }
+            ?? AVSpeechSynthesisVoice(language: "en-US")
+    }()
+
     /// 単語などの単発読み上げ(ハイライトなし)
     func speak(_ text: String, slow: Bool = false) {
         stop()
@@ -52,7 +60,7 @@ final class SpeechSynthesisService: NSObject, ObservableObject, AVSpeechSynthesi
         try? session.setActive(true, options: [])
 
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.voice = englishVoice
         utterance.rate = slow ? 0.3 : AVSpeechUtteranceDefaultSpeechRate
         utterance.volume = 1.0
         synthesizer.speak(utterance)

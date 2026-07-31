@@ -25,7 +25,20 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
 
     var speedLabel: String { ["1×", "2×", "3×"][speedIndex] }
     /// AVSpeechUtterance の rate は線形でないため、体感で速くなる値を割り当てる
-    private var rate: Float { [AVSpeechUtteranceDefaultSpeechRate, 0.57, 0.64][speedIndex] }
+    private var englishRate: Float { [AVSpeechUtteranceDefaultSpeechRate, 0.57, 0.64][speedIndex] }
+    /// 日本語は速くすると不明瞭になりやすいので、英語より控えめに上げる
+    private var japaneseRate: Float { [AVSpeechUtteranceDefaultSpeechRate, 0.55, 0.60][speedIndex] }
+
+    /// インストール済みの中で最も品質の高い声を選ぶ(既定の compact 声は聞き取りにくい)
+    private static func bestVoice(for language: String) -> AVSpeechSynthesisVoice? {
+        let candidates = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == language }
+        return candidates.first { $0.quality == .premium }
+            ?? candidates.first { $0.quality == .enhanced }
+            ?? AVSpeechSynthesisVoice(language: language)
+    }
+
+    private lazy var englishVoice = Self.bestVoice(for: "en-US")
+    private lazy var japaneseVoice = Self.bestVoice(for: "ja-JP")
 
     func toggleSpeed() {
         speedIndex = (speedIndex + 1) % 3
@@ -67,14 +80,16 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         let utterance: AVSpeechUtterance
         if phase == 0 {
             utterance = AVSpeechUtterance(string: item.english)
-            utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+            utterance.voice = englishVoice
+            utterance.rate = englishRate
             utterance.postUtteranceDelay = 0.1
         } else {
             utterance = AVSpeechUtterance(string: item.japanese)
-            utterance.voice = AVSpeechSynthesisVoice(language: "ja-JP")
+            utterance.voice = japaneseVoice
+            utterance.rate = japaneseRate
             utterance.postUtteranceDelay = 0.25
         }
-        utterance.rate = rate
+        utterance.volume = 1.0
         synthesizer.speak(utterance)
     }
 
