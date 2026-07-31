@@ -13,6 +13,10 @@ struct RecallSessionView: View {
     @State private var resultAttempt: RecallAttempt?
     @State private var showResult = false
 
+    // ヒント: 英文の語順のまま単語ごとの和訳を並べる
+    @State private var showHint = false
+    @State private var hintWords: [String] = []
+
     // 単語長押しで和訳+発音
     @State private var selectedWord: SelectedWord?
     @StateObject private var wordMeaning = WordMeaningModel()
@@ -41,6 +45,17 @@ struct RecallSessionView: View {
                     Text(passage.japaneseFullText.isEmpty ? "(和訳がありません — 登録し直して翻訳してください)" : passage.japaneseFullText)
                         .font(.body)
                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if showHint {
+                        FlowLayout(spacing: 6, lineSpacing: 8) {
+                            ForEach(Array(hintWords.enumerated()), id: \.offset) { _, gloss in
+                                Text(gloss)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
 
                     if showAnswer {
                         // 単語を長押しすると和訳を表示(無音。発音はシート内のボタンで再生)
@@ -120,6 +135,20 @@ struct RecallSessionView: View {
         // 暗記中は下のタブバーを隠す
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
+            // ヒント(英文の語順で和訳を並べる)
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    if !showHint {
+                        buildHint()
+                    }
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        showHint.toggle()
+                    }
+                } label: {
+                    Image(systemName: showHint ? "lightbulb.fill" : "lightbulb")
+                        .foregroundStyle(showHint ? Color.yellow : Color.accentColor)
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 NavigationLink {
                     MistakeAnalysisView(passage: passage)
@@ -212,6 +241,31 @@ struct RecallSessionView: View {
 
     private var currentAnswer: String {
         speech.fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// ヒント用: 英文の語順どおりに単語ごとの和訳を作る。
+    /// 内蔵辞書 → キャッシュの順で引き、見つからない語は英語のまま出す。
+    private func buildHint() {
+        let tokens = WordTokenizer.tokenize(referenceText)
+        hintWords = tokens.map { token in
+            let word = token.normalized.isEmpty ? token.display : token.normalized
+            if let entry = BasicWordDictionary.lookup(word) {
+                return firstSense(entry)
+            }
+            let target = word
+            let descriptor = FetchDescriptor<WordCacheEntry>(
+                predicate: #Predicate { $0.word == target }
+            )
+            if let cached = try? context.fetch(descriptor).first {
+                return firstSense(cached.japanese)
+            }
+            return token.display
+        }
+    }
+
+    /// 「あれ・〜ということ」のような複数の意味からヒント用に最初の意味だけ取り出す
+    private func firstSense(_ entry: String) -> String {
+        entry.split(separator: "・").first.map(String.init) ?? entry
     }
 
     /// 単語の意味を表示: 内蔵辞書 → キャッシュ → Apple 翻訳の順で解決
