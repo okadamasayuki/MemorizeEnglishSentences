@@ -40,24 +40,32 @@ struct PassageListView: View {
                         description: Text("右上の + から英文を登録しましょう。音声入力でも写真でも OK です。")
                     )
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(blocks) { block in
-                                BlockCardView(
-                                    block: block,
-                                    isExpanded: expandedBlockIDs.contains(block.persistentModelID),
-                                    onToggle: { toggle(block) },
-                                    onWordTap: { word in
-                                        selectedWord = SelectedWord(word: word)
-                                    },
-                                    onLongPress: {
-                                        selectedSentence = SelectedSentence(sentence: block.englishText)
-                                    }
-                                )
+                    List {
+                        ForEach(blocks) { block in
+                            BlockCardView(
+                                block: block,
+                                isExpanded: expandedBlockIDs.contains(block.persistentModelID),
+                                onToggle: { toggle(block) },
+                                onWordTap: { word in
+                                    selectedWord = SelectedWord(word: word)
+                                },
+                                onLongPress: {
+                                    selectedSentence = SelectedSentence(sentence: block.englishText)
+                                }
+                            )
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    delete(block)
+                                } label: {
+                                    Label("削除", systemImage: "trash")
+                                }
                             }
                         }
-                        .padding()
                     }
+                    .listStyle(.plain)
                 }
             }
             .toolbar {
@@ -88,6 +96,16 @@ struct PassageListView: View {
                 startRetryTranslationIfNeeded()
             }
         }
+    }
+
+    private func delete(_ block: Block) {
+        let passage = block.passage
+        context.delete(block)
+        // ブロックがなくなった文章は本体ごと削除する
+        if let passage, passage.blocks.filter({ $0.persistentModelID != block.persistentModelID }).isEmpty {
+            context.delete(passage)
+        }
+        try? context.save()
     }
 
     private func toggle(_ block: Block) {
