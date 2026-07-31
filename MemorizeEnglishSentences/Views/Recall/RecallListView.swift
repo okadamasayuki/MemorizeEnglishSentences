@@ -3,12 +3,13 @@ import SwiftUI
 
 struct RecallListView: View {
     @Environment(\.modelContext) private var context
+    private static let sortOrder: [SortDescriptor<Passage>] = [
+        SortDescriptor(\Passage.sortIndex),
+        SortDescriptor(\Passage.createdAt, order: .reverse),
+    ]
     @Query(
         filter: #Predicate<Passage> { $0.purposeRaw == "recall" },
-        sort: [
-            SortDescriptor(\Passage.sortIndex),
-            SortDescriptor(\Passage.createdAt, order: .reverse),
-        ]
+        sort: sortOrder
     ) private var passages: [Passage]
     @State private var showingAdd = false
     @State private var path: [Passage] = []
