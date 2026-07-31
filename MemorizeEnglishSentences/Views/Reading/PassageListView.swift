@@ -58,17 +58,10 @@ struct PassageListView: View {
                         }
                     }
                     .listStyle(.plain)
-                }
-            }
-            // 選択モード中であることがわかるバナー
-            .safeAreaInset(edge: .top) {
-                if isSelecting {
-                    Text(selection.isEmpty ? "削除する項目をタップして選択" : "\(selection.count) 件選択中")
-                        .font(.footnote.bold())
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(Color.red)
+                    // 選択モード中は背景色を少し変えてわかるようにする
+                    .scrollContentBackground(.hidden)
+                    .background(isSelecting ? Color.red.opacity(0.07) : Color(.systemBackground))
+                    .animation(.easeInOut(duration: 0.2), value: isSelecting)
                 }
             }
             .toolbar {
