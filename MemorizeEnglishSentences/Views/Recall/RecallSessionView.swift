@@ -7,7 +7,6 @@ struct RecallSessionView: View {
     let passage: Passage
 
     @State private var speech = SpeechRecognitionService()
-    @State private var typedAnswer = ""
     @State private var showAnswer = false
     @State private var resultAttempt: RecallAttempt?
     @State private var showResult = false
@@ -61,11 +60,6 @@ struct RecallSessionView: View {
             Divider()
 
             VStack(spacing: 10) {
-                TextField("キーボードで回答することもできます", text: $typedAnswer, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(1...4)
-                    .textInputAutocapitalization(.never)
-
                 HStack(spacing: 12) {
                     DictationButton(speech: speech, label: "音声で回答")
 
@@ -114,9 +108,7 @@ struct RecallSessionView: View {
     }
 
     private var currentAnswer: String {
-        let spoken = speech.fullText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !spoken.isEmpty { return spoken }
-        return typedAnswer.trimmingCharacters(in: .whitespacesAndNewlines)
+        speech.fullText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func confirmAnswer() {
@@ -141,7 +133,6 @@ struct RecallSessionView: View {
         try? context.save()
 
         speech.reset()
-        typedAnswer = ""
         resultAttempt = attempt
         showResult = true
     }
