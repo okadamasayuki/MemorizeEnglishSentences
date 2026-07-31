@@ -12,7 +12,10 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     @Published var isPlaying = false
     @Published var speedIndex = 0
 
-    private let synthesizer = AVSpeechSynthesizer()
+    // Siri ボイスと英語ボイスを同じエンジンで交互に使うと英語の音質が
+    // 劣化することがあるため、言語ごとにエンジンを分ける
+    private let englishSynthesizer = AVSpeechSynthesizer()
+    private let japaneseSynthesizer = AVSpeechSynthesizer()
     private var queue: [(id: PersistentIdentifier, english: String, japanese: String)] = []
     private var index = 0
     /// 0 = 英単語を読んでいる, 1 = 和訳を読んでいる
@@ -20,7 +23,8 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
 
     private override init() {
         super.init()
-        synthesizer.delegate = self
+        englishSynthesizer.delegate = self
+        japaneseSynthesizer.delegate = self
     }
 
     var speedLabel: String { ["1×", "2×", "3×"][speedIndex] }
@@ -79,8 +83,11 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
 
     func stop() {
         isPlaying = false
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
+        if englishSynthesizer.isSpeaking {
+            englishSynthesizer.stopSpeaking(at: .immediate)
+        }
+        if japaneseSynthesizer.isSpeaking {
+            japaneseSynthesizer.stopSpeaking(at: .immediate)
         }
         currentID = nil
         queue = []
@@ -107,7 +114,7 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
             utterance.postUtteranceDelay = 0.25
         }
         utterance.volume = 1.0
-        synthesizer.speak(utterance)
+        (phase == 0 ? englishSynthesizer : japaneseSynthesizer).speak(utterance)
     }
 
     /// 読み上げ用に記号を取り除く(「〜を変える」→「を変える」など)。
