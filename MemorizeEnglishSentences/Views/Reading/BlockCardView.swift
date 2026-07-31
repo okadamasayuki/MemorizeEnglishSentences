@@ -27,7 +27,6 @@ struct BlockCardView: View {
             }
 
             if isExpanded {
-                Divider()
                 Text(block.japaneseText ?? "(未翻訳 — ネットワークまたは言語データを確認してください)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
