@@ -76,11 +76,8 @@ struct RecallListView: View {
     }
 
     private func statusBadge(_ status: MemorizationStatus) -> some View {
-        Text(status.labelJa)
-            .font(.caption.bold())
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(status.color.opacity(0.15)))
+        Image(systemName: status.iconName)
+            .font(.footnote)
             .foregroundStyle(status.color)
     }
 
