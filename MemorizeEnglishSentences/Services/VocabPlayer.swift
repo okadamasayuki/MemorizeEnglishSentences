@@ -33,27 +33,19 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     /// 日本語は速くすると不明瞭になりやすいので、英語より控えめに上げる
     private var japaneseRate: Float { [AVSpeechUtteranceDefaultSpeechRate, 0.55, 0.60][speedIndex] }
 
-    /// 品質の高い声を選ぶ(既定の compact 声は聞き取りにくい)。
-    /// 英語は premium だと息継ぎ音(「すっ」という音)が入るため enhanced を優先する。
-    private static func bestVoice(for language: String, preferPremium: Bool) -> AVSpeechSynthesisVoice? {
-        let candidates = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == language }
-        let ordered: [AVSpeechSynthesisVoiceQuality] = preferPremium ? [.premium, .enhanced] : [.enhanced, .premium]
-        for quality in ordered {
-            if let voice = candidates.first(where: { $0.quality == quality }) {
-                return voice
-            }
-        }
-        return AVSpeechSynthesisVoice(language: language)
-    }
-
-    private lazy var englishVoice = Self.bestVoice(for: "en-US", preferPremium: false)
+    /// 英語は標準ボイス(端末既定)がいちばん聞き取りやすい
+    private lazy var englishVoice = AVSpeechSynthesisVoice(language: "en-US")
     /// 日本語は Siri の声(O-ren)がいちばん聞き取りやすいので最優先。
-    /// なければ従来どおり品質の高い声にフォールバックする
+    /// なければ品質の高い声にフォールバックする
     private lazy var japaneseVoice: AVSpeechSynthesisVoice? = {
-        let siri = AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language == "ja-JP" && $0.identifier.contains("siri") }
+        let candidates = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == "ja-JP" }
+        let siri = candidates
+            .filter { $0.identifier.contains("siri") }
             .sorted { $0.quality.rawValue > $1.quality.rawValue }
-        return siri.first ?? Self.bestVoice(for: "ja-JP", preferPremium: true)
+        return siri.first
+            ?? candidates.first { $0.quality == .premium }
+            ?? candidates.first { $0.quality == .enhanced }
+            ?? AVSpeechSynthesisVoice(language: "ja-JP")
     }()
 
     func toggleSpeed() {

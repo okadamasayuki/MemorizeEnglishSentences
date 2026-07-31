@@ -20,13 +20,8 @@ final class SpeechSynthesisService: NSObject, ObservableObject, AVSpeechSynthesi
         synthesizer.delegate = self
     }
 
-    /// 品質の高い英語の声を選ぶ(premium は息継ぎ音が入るため enhanced を優先)
-    private lazy var englishVoice: AVSpeechSynthesisVoice? = {
-        let candidates = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == "en-US" }
-        return candidates.first { $0.quality == .enhanced }
-            ?? candidates.first { $0.quality == .premium }
-            ?? AVSpeechSynthesisVoice(language: "en-US")
-    }()
+    /// 英語は標準ボイス(端末既定)を使う
+    private lazy var englishVoice = AVSpeechSynthesisVoice(language: "en-US")
 
     /// 単語などの単発読み上げ(ハイライトなし)
     func speak(_ text: String, slow: Bool = false) {
