@@ -25,7 +25,7 @@ struct PassageListView: View {
     @State private var selectedWord: SelectedWord?
     @State private var selectedSentence: SelectedSentence?
     @State private var retryConfiguration: TranslationSession.Configuration?
-    @State private var editMode: EditMode = .inactive
+    @State private var isSelecting = false
     @State private var selection = Set<PersistentIdentifier>()
 
     private var blocks: [Block] {
@@ -42,51 +42,37 @@ struct PassageListView: View {
                         description: Text("右上の + から英文を登録しましょう。音声入力でも写真でも OK です。")
                     )
                 } else {
-                    List(selection: $selection) {
+                    List {
                         ForEach(blocks) { block in
-                            BlockCardView(
-                                block: block,
-                                isExpanded: expandedBlockIDs.contains(block.persistentModelID),
-                                onToggle: { toggle(block) },
-                                onWordTap: { word in
-                                    selectedWord = SelectedWord(word: word)
-                                },
-                                onLongPress: {
-                                    selectedSentence = SelectedSentence(sentence: block.englishText)
+                            blockRow(block)
+                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        delete(block)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
                                 }
-                            )
-                            // 選択モード中はカード内のタップを無効化して行選択を優先する
-                            .allowsHitTesting(!editMode.isEditing)
-                            .tag(block.persistentModelID)
-                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    delete(block)
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                            }
                         }
                     }
                     .listStyle(.plain)
-                    .environment(\.editMode, $editMode)
                 }
             }
             .toolbar {
                 if !blocks.isEmpty {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button(editMode.isEditing ? "完了" : "選択") {
+                        Button(isSelecting ? "完了" : "選択") {
                             withAnimation {
-                                editMode = editMode.isEditing ? .inactive : .active
+                                isSelecting.toggle()
                                 selection.removeAll()
                             }
                         }
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    if editMode.isEditing {
+                    if isSelecting {
                         Button(role: .destructive) {
                             deleteSelected()
                         } label: {
@@ -123,6 +109,43 @@ struct PassageListView: View {
         }
     }
 
+    /// 選択モード中はタップで赤くハイライトし、通常時はいつも通りのカード
+    @ViewBuilder
+    private func blockRow(_ block: Block) -> some View {
+        let isSelected = selection.contains(block.persistentModelID)
+        ZStack {
+            BlockCardView(
+                block: block,
+                isExpanded: expandedBlockIDs.contains(block.persistentModelID),
+                onToggle: { toggle(block) },
+                onWordTap: { word in
+                    selectedWord = SelectedWord(word: word)
+                },
+                onLongPress: {
+                    selectedSentence = SelectedSentence(sentence: block.englishText)
+                }
+            )
+            .allowsHitTesting(!isSelecting)
+
+            if isSelecting {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected ? Color.red.opacity(0.18) : Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(isSelected ? Color.red : Color.clear, lineWidth: 2)
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 12))
+                    .onTapGesture {
+                        if isSelected {
+                            selection.remove(block.persistentModelID)
+                        } else {
+                            selection.insert(block.persistentModelID)
+                        }
+                    }
+            }
+        }
+    }
+
     private func delete(_ block: Block) {
         let passage = block.passage
         context.delete(block)
@@ -152,7 +175,7 @@ struct PassageListView: View {
         try? context.save()
         withAnimation {
             selection.removeAll()
-            editMode = .inactive
+            isSelecting = false
         }
     }
 
