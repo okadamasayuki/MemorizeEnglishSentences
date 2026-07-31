@@ -101,13 +101,24 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
             utterance.rate = englishRate
             utterance.postUtteranceDelay = 0.1
         } else {
-            utterance = AVSpeechUtterance(string: item.japanese)
+            utterance = AVSpeechUtterance(string: Self.spokenJapanese(item.japanese))
             utterance.voice = japaneseVoice
             utterance.rate = japaneseRate
             utterance.postUtteranceDelay = 0.25
         }
         utterance.volume = 1.0
         synthesizer.speak(utterance)
+    }
+
+    /// 読み上げ用に記号を取り除く(「〜を変える」→「を変える」など)。
+    /// 記号が混ざるとイントネーションが崩れるため。表示側はそのまま。
+    static func spokenJapanese(_ text: String) -> String {
+        var spoken = text
+        spoken = spoken.replacingOccurrences(of: "〜", with: "")
+        spoken = spoken.replacingOccurrences(of: "・", with: "、")
+        spoken = spoken.replacingOccurrences(of: "(", with: "、")
+        spoken = spoken.replacingOccurrences(of: ")", with: "、")
+        return spoken.trimmingCharacters(in: CharacterSet(charactersIn: "、 "))
     }
 
     private func advance() {
