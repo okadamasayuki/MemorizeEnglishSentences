@@ -9,6 +9,8 @@ struct RecallSessionView: View {
 
     @State private var speech = SpeechRecognitionService()
     @State private var showAnswer = false
+    @State private var showRenameAlert = false
+    @State private var editingTitle = ""
     @State private var resultAttempt: RecallAttempt?
     @State private var showResult = false
 
@@ -20,11 +22,6 @@ struct RecallSessionView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // タイトル(タップで編集できる)
-                    TextField("タイトル", text: $passage.title, axis: .vertical)
-                        .font(.title3.bold())
-                        .onSubmit { try? context.save() }
-
                     // 習熟ステータス
                     Picker("習熟度", selection: statusBinding) {
                         ForEach(MemorizationStatus.allCases) { status in
@@ -98,7 +95,28 @@ struct RecallSessionView: View {
             }
             .padding()
         }
+        .navigationTitle(passage.title)
         .navigationBarTitleDisplayMode(.inline)
+        // ナビゲーションバーのタイトルをタップ → 「タイトルを編集」
+        .toolbarTitleMenu {
+            Button {
+                editingTitle = passage.title
+                showRenameAlert = true
+            } label: {
+                Label("タイトルを編集", systemImage: "pencil")
+            }
+        }
+        .alert("タイトルを編集", isPresented: $showRenameAlert) {
+            TextField("タイトル", text: $editingTitle)
+            Button("保存") {
+                let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    passage.title = trimmed
+                    try? context.save()
+                }
+            }
+            Button("キャンセル", role: .cancel) {}
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 NavigationLink {
