@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// ブロックカード。英文は常に表示し、カードをタップすると日本語訳を表示/非表示。
-/// 単語タップで意味を表示。スピーカーで全文読み上げ(読んでいる単語は太字)。
+/// 単語長押しで意味を表示。スピーカーで全文読み上げ(読んでいる単語は下線)。
 struct BlockCardView: View {
     @ObservedObject private var playback = SpeechSynthesisService.shared
 
@@ -52,7 +52,8 @@ struct BlockCardView: View {
                                         .offset(y: 3)
                                 }
                             }
-                            .onTapGesture {
+                            // 長押しで単語の意味を表示(タップはカードの和訳切り替えに回す)
+                            .onLongPressGesture {
                                 let word = token.normalized.isEmpty ? token.display : token.normalized
                                 onWordTap(word)
                             }
