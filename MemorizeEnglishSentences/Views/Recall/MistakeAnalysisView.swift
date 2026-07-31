@@ -75,8 +75,6 @@ struct MistakeAnalysisView: View {
 
     private var heatmapSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("間違いヒートマップ")
-                .font(.headline)
             Text("赤が濃い単語ほど間違えやすい箇所です(挑戦 \(attempts.count) 回)")
                 .font(.caption)
                 .foregroundStyle(.secondary)

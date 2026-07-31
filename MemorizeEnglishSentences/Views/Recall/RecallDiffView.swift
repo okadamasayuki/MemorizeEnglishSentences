@@ -41,14 +41,6 @@ struct RecallDiffView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Divider()
-
-                Text("認識されたテキスト")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(attempt.recognizedText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -63,9 +55,6 @@ struct RecallDiffView: View {
             Text("\(Int(diff.accuracy * 100))%")
                 .font(.system(size: 44, weight: .bold, design: .rounded))
                 .foregroundStyle(accuracyColor(diff.accuracy))
-            Text("(\(diff.matchCount)/\(diff.refCount) 語)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
             Spacer()
             Text(attempt.date.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption)
