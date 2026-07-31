@@ -20,11 +20,11 @@ final class SpeechSynthesisService: NSObject, ObservableObject, AVSpeechSynthesi
         synthesizer.delegate = self
     }
 
-    /// インストール済みの中で最も品質の高い英語の声を選ぶ
+    /// 品質の高い英語の声を選ぶ(premium は息継ぎ音が入るため enhanced を優先)
     private lazy var englishVoice: AVSpeechSynthesisVoice? = {
         let candidates = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == "en-US" }
-        return candidates.first { $0.quality == .premium }
-            ?? candidates.first { $0.quality == .enhanced }
+        return candidates.first { $0.quality == .enhanced }
+            ?? candidates.first { $0.quality == .premium }
             ?? AVSpeechSynthesisVoice(language: "en-US")
     }()
 

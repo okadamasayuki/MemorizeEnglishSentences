@@ -29,16 +29,21 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     /// 日本語は速くすると不明瞭になりやすいので、英語より控えめに上げる
     private var japaneseRate: Float { [AVSpeechUtteranceDefaultSpeechRate, 0.55, 0.60][speedIndex] }
 
-    /// インストール済みの中で最も品質の高い声を選ぶ(既定の compact 声は聞き取りにくい)
-    private static func bestVoice(for language: String) -> AVSpeechSynthesisVoice? {
+    /// 品質の高い声を選ぶ(既定の compact 声は聞き取りにくい)。
+    /// 英語は premium だと息継ぎ音(「すっ」という音)が入るため enhanced を優先する。
+    private static func bestVoice(for language: String, preferPremium: Bool) -> AVSpeechSynthesisVoice? {
         let candidates = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == language }
-        return candidates.first { $0.quality == .premium }
-            ?? candidates.first { $0.quality == .enhanced }
-            ?? AVSpeechSynthesisVoice(language: language)
+        let ordered: [AVSpeechSynthesisVoiceQuality] = preferPremium ? [.premium, .enhanced] : [.enhanced, .premium]
+        for quality in ordered {
+            if let voice = candidates.first(where: { $0.quality == quality }) {
+                return voice
+            }
+        }
+        return AVSpeechSynthesisVoice(language: language)
     }
 
-    private lazy var englishVoice = Self.bestVoice(for: "en-US")
-    private lazy var japaneseVoice = Self.bestVoice(for: "ja-JP")
+    private lazy var englishVoice = Self.bestVoice(for: "en-US", preferPremium: false)
+    private lazy var japaneseVoice = Self.bestVoice(for: "ja-JP", preferPremium: true)
 
     func toggleSpeed() {
         speedIndex = (speedIndex + 1) % 3
@@ -54,6 +59,14 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         } ?? 0
         phase = 0
         isPlaying = true
+
+        // セッション設定は再生開始時の 1 回だけ(毎回設定し直すとノイズが乗る)
+        let session = AVAudioSession.sharedInstance()
+        if !SpeechRecognitionService.isAnyRecording {
+            try? session.setCategory(.playback, mode: .spokenAudio, options: [])
+        }
+        try? session.setActive(true, options: [])
+
         speakCurrent()
     }
 
@@ -73,12 +86,6 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         }
         let item = queue[index]
         currentID = item.id
-
-        let session = AVAudioSession.sharedInstance()
-        if !SpeechRecognitionService.isAnyRecording {
-            try? session.setCategory(.playback, mode: .spokenAudio, options: [])
-        }
-        try? session.setActive(true, options: [])
 
         let utterance: AVSpeechUtterance
         if phase == 0 {
