@@ -67,11 +67,14 @@ struct PassageListView: View {
             .toolbar {
                 if !blocks.isEmpty {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button(isSelecting ? "完了" : "選択") {
+                        Button {
                             withAnimation {
                                 isSelecting.toggle()
                                 selection.removeAll()
                             }
+                        } label: {
+                            Image(systemName: isSelecting ? "checkmark.circle.fill" : "checkmark.circle")
+                                .foregroundStyle(isSelecting ? Color.red : Color.accentColor)
                         }
                     }
                 }
