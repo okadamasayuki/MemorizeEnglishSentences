@@ -33,7 +33,6 @@ struct PassageListView: View {
                     }
                 }
             }
-            .navigationTitle("音読")
             .navigationDestination(for: Passage.self) { passage in
                 ReadingView(passage: passage)
             }

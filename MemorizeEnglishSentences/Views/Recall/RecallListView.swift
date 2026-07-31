@@ -41,7 +41,6 @@ struct RecallListView: View {
                     }
                 }
             }
-            .navigationTitle("暗記")
             .navigationDestination(for: Passage.self) { passage in
                 RecallSessionView(passage: passage)
             }
