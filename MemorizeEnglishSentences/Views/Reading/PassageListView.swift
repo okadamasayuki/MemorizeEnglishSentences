@@ -66,10 +66,8 @@ private final class WordTranslationBroker {
 
     func requests() -> AsyncStream<String> {
         AsyncStream { continuation in
-            print("[WT] stream consumer attached")
             self.continuation = continuation
             if let pending {
-                print("[WT] flushing pending: \(pending)")
                 continuation.yield(pending)
                 self.pending = nil
             }
@@ -77,7 +75,6 @@ private final class WordTranslationBroker {
     }
 
     func request(_ word: String) {
-        print("[WT] request '\(word)' continuation=\(continuation != nil)")
         if let continuation {
             continuation.yield(word)
         } else {
@@ -215,13 +212,10 @@ struct PassageListView: View {
                 // 起動直後は言語カタログの読み込みが間に合わず
                 // unsupportedSourceLanguage で壊れたセッションになることがあるため、
                 // その場合は少し待ってセッションを作り直す。
-                print("[WT] task started")
                 do {
                     let r = try await translate(session, "hello", timeoutSeconds: 3)
-                    print("[WT] warmup ok: \(r)")
                     warmupRetryCount = 0
                 } catch {
-                    print("[WT] warmup error (retry \(warmupRetryCount)): \(error)")
                     if warmupRetryCount < 8 {
                         warmupRetryCount += 1
                         try? await Task.sleep(for: .seconds(0.5))
@@ -231,19 +225,15 @@ struct PassageListView: View {
                 }
 
                 for await target in wordBroker.requests() {
-                    print("[WT] translating '\(target)'")
                     do {
                         let translated = try await translate(session, target, timeoutSeconds: 10)
-                        print("[WT] translated '\(target)' -> \(translated)")
                         if selectedWord?.word == target {
                             wordMeaning.japanese = translated
                         }
                         saveWordCache(target, translated)
                     } catch {
-                        print("[WT] translate error '\(target)': \(error)")
                         // セッション不良の可能性があるので、作り直して 1 回だけ再翻訳
                         if wordBroker.shouldRetry(target) {
-                            print("[WT] retrying '\(target)' with new session")
                             wordBroker.stashForRetry(target)
                             wordConfiguration?.invalidate()
                             return
@@ -253,7 +243,6 @@ struct PassageListView: View {
                         }
                     }
                 }
-                print("[WT] task ended")
             }
             // 未翻訳ブロックは表示時に再翻訳を試みる
             .translationTask(retryConfiguration) { session in
@@ -309,12 +298,10 @@ struct PassageListView: View {
 
     /// 単語の意味を表示: 内蔵辞書 → キャッシュ → Apple 翻訳の順で解決
     private func showWord(_ word: String) {
-        print("[WT] tap word='\(word)'")
         wordMeaning.reset()
         selectedWord = SelectedWord(word: word)
 
         if let entry = BasicWordDictionary.lookup(word) {
-            print("[WT] dict hit: \(entry)")
             wordMeaning.japanese = entry
             return
         }
@@ -323,11 +310,9 @@ struct PassageListView: View {
             predicate: #Predicate { $0.word == target }
         )
         if let cached = try? context.fetch(descriptor).first {
-            print("[WT] cache hit: \(cached.japanese)")
             wordMeaning.japanese = cached.japanese
             return
         }
-        print("[WT] no dict/cache -> requesting translation")
         wordBroker.request(word)
     }
 
