@@ -7,6 +7,33 @@ private struct SelectedWord: Identifiable {
     let word: String
 }
 
+/// 単語翻訳のリクエストを、常駐している翻訳セッションへ流し込むための橋渡し。
+/// (タップごとに invalidate() でセッションを作り直す方式は、シート表示と
+///  タイミングが重なる初回タップで再実行されないことがあるため)
+@MainActor
+private final class WordTranslationBroker {
+    private var continuation: AsyncStream<String>.Continuation?
+    private var pending: String?
+
+    func requests() -> AsyncStream<String> {
+        AsyncStream { continuation in
+            self.continuation = continuation
+            if let pending {
+                continuation.yield(pending)
+                self.pending = nil
+            }
+        }
+    }
+
+    func request(_ word: String) {
+        if let continuation {
+            continuation.yield(word)
+        } else {
+            pending = word
+        }
+    }
+}
+
 /// 音読タブ。文章の分類はせず、登録したすべての英文ブロックを 1 画面に連続表示する。
 struct PassageListView: View {
     @Environment(\.modelContext) private var context
@@ -20,7 +47,7 @@ struct PassageListView: View {
     @State private var selectedWord: SelectedWord?
     @State private var wordJapanese: String?
     @State private var wordFailed = false
-    @State private var pendingWord: String?
+    @State private var wordBroker = WordTranslationBroker()
     @State private var wordConfiguration: TranslationSession.Configuration?
     @State private var retryConfiguration: TranslationSession.Configuration?
     @State private var isSelecting = false
@@ -130,15 +157,20 @@ struct PassageListView: View {
             .sheet(item: $selectedWord) { selected in
                 WordPopupView(word: selected.word, japanese: wordJapanese, failed: wordFailed)
             }
-            // 単語の翻訳(シート内で translationTask を使うとクラッシュするため親側で実行)
+            // 単語の翻訳(常駐セッション 1 本に、タップされた単語をストリームで流し込む)
             .translationTask(wordConfiguration) { session in
-                guard let target = pendingWord else { return }
-                do {
-                    let response = try await session.translate(target)
-                    wordJapanese = response.targetText
-                    saveWordCache(target, response.targetText)
-                } catch {
-                    wordFailed = true
+                for await target in wordBroker.requests() {
+                    do {
+                        let response = try await session.translate(target)
+                        if selectedWord?.word == target {
+                            wordJapanese = response.targetText
+                        }
+                        saveWordCache(target, response.targetText)
+                    } catch {
+                        if selectedWord?.word == target {
+                            wordFailed = true
+                        }
+                    }
                 }
             }
             // 未翻訳ブロックは表示時に再翻訳を試みる
@@ -197,7 +229,6 @@ struct PassageListView: View {
     private func showWord(_ word: String) {
         wordJapanese = nil
         wordFailed = false
-        pendingWord = nil
         selectedWord = SelectedWord(word: word)
 
         if let entry = BasicWordDictionary.lookup(word) {
@@ -212,15 +243,7 @@ struct PassageListView: View {
             wordJapanese = cached.japanese
             return
         }
-        pendingWord = word
-        if wordConfiguration == nil {
-            wordConfiguration = TranslationSession.Configuration(
-                source: TranslationAvailability.english,
-                target: TranslationAvailability.japanese
-            )
-        } else {
-            wordConfiguration?.invalidate()
-        }
+        wordBroker.request(word)
     }
 
     private func saveWordCache(_ word: String, _ translation: String) {
