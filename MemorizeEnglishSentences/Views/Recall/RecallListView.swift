@@ -22,11 +22,11 @@ struct RecallListView: View {
                     List {
                         ForEach(passages) { passage in
                             NavigationLink(value: passage) {
-                                VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 8) {
+                                    statusBadge(passage.memorizationStatus)
                                     Text(rowText(for: passage))
                                         .font(.headline)
                                         .lineLimit(1)
-                                    statusBadge(passage.memorizationStatus)
                                 }
                             }
                         }
