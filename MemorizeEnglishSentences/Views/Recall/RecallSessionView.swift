@@ -91,8 +91,13 @@ struct RecallSessionView: View {
             }
             .padding()
         }
-        // ステータスに合わせて背景色をうっすら変える
-        .background(passage.memorizationStatus.color.opacity(0.06).ignoresSafeArea())
+        // ステータスに合わせて背景色をうっすら変える(どちらでもない = 色なし)
+        .background(
+            (passage.memorizationStatus == .normal
+                ? Color.clear
+                : passage.memorizationStatus.color.opacity(0.06))
+                .ignoresSafeArea()
+        )
         .animation(.easeInOut(duration: 0.25), value: passage.memorizationStatus)
         .navigationBarTitleDisplayMode(.inline)
         // 暗記中は下のタブバーを隠す
