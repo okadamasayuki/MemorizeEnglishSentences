@@ -15,8 +15,7 @@ struct VocabListView: View {
                 if words.isEmpty {
                     ContentUnavailableView(
                         "単語がまだありません",
-                        systemImage: "textformat.abc",
-                        description: Text("音声教材から取り込んだ単語がここに表示されます。")
+                        systemImage: "rectangle.stack"
                     )
                 } else {
                     List {
