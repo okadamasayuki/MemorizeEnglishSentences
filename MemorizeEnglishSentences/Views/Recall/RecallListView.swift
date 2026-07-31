@@ -8,9 +8,10 @@ struct RecallListView: View {
         sort: \Passage.createdAt, order: .reverse
     ) private var passages: [Passage]
     @State private var showingAdd = false
+    @State private var path: [Passage] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if passages.isEmpty {
                     ContentUnavailableView(
@@ -48,8 +49,6 @@ struct RecallListView: View {
                     .listStyle(.plain)
                 }
             }
-            // 一覧では明示的にタブバーを表示(戻り遷移と同時に復元させる)
-            .toolbar(.visible, for: .tabBar)
             .navigationDestination(for: Passage.self) { passage in
                 RecallSessionView(passage: passage)
             }
@@ -66,6 +65,10 @@ struct RecallListView: View {
                 AddPassageView(purpose: .recall)
             }
         }
+        // 詳細画面(階層あり)ではタブバーを隠す。
+        // iOS 18 では画面側の指定が効かないことがあるため、タブのルートで出し分ける
+        .toolbar(path.isEmpty ? .visible : .hidden, for: .tabBar)
+        .animation(.easeInOut(duration: 0.2), value: path.isEmpty)
     }
 
     /// 一覧には日本語訳の先頭部分を表示する(和訳がなければタイトル)
