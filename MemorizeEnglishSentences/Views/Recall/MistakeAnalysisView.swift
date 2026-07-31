@@ -105,7 +105,7 @@ struct MistakeAnalysisView: View {
                         RecallDiffView(attempt: attempt)
                     } label: {
                         HStack {
-                            Text(attempt.date.formatted(date: .abbreviated, time: .shortened))
+                            Text(attempt.date.formatted(date: .abbreviated, time: .omitted))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Spacer()

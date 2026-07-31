@@ -54,7 +54,7 @@ struct RecallDiffView: View {
                 .font(.system(size: 44, weight: .bold, design: .rounded))
                 .foregroundStyle(accuracyColor(diff.accuracy))
             Spacer()
-            Text(attempt.date.formatted(date: .abbreviated, time: .shortened))
+            Text(attempt.date.formatted(date: .abbreviated, time: .omitted))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
