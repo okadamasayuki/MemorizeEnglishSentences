@@ -214,6 +214,14 @@ struct AddPassageView: View {
                             }
                         }
                         TextField("英文", text: $sentences[index], axis: .vertical)
+
+                        // 読み取りミスの可能性がある語を警告(スペルチェック)
+                        let suspicious = SentenceValidator.misspelledWords(in: sentences[index])
+                        if !suspicious.isEmpty {
+                            Label("英文として不自然な語: \(suspicious.joined(separator: ", "))", systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
                     }
                     .padding(.vertical, 4)
                 }
@@ -221,7 +229,7 @@ struct AddPassageView: View {
                     sentences.remove(atOffsets: offsets)
                 }
             } footer: {
-                Text("1 行が 1 ブロック(1 文)として保存されます。編集・削除・前の文との結合ができます。")
+                Text("1 行が 1 ブロックとして保存されます。⚠️ が付いた行は写真の読み取りミスの可能性があるため、編集または左スワイプで削除してから進んでください。")
             }
         }
     }
