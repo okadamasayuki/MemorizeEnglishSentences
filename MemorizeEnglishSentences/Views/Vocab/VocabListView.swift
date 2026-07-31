@@ -15,6 +15,13 @@ struct VocabListView: View {
     @AppStorage("vocabRepeatBefore") private var repeatBefore = 1
     @AppStorage("vocabRepeatAfter") private var repeatAfter = 1
 
+    /// 星印を付けた単語だけを表示・再生する
+    @AppStorage("vocabStarredOnly") private var starredOnly = false
+
+    private var visibleWords: [VocabWord] {
+        starredOnly ? words.filter(\.isStarred) : words
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -26,7 +33,7 @@ struct VocabListView: View {
                 } else {
                     ScrollViewReader { proxy in
                         List {
-                            ForEach(words) { word in
+                            ForEach(visibleWords) { word in
                                 wordRow(word)
                                     .id(word.persistentModelID)
                                     .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
@@ -39,6 +46,16 @@ struct VocabListView: View {
                                         } label: {
                                             Image(systemName: "trash")
                                         }
+                                    }
+                                    // 右スワイプで星印の付け外し
+                                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                        Button {
+                                            word.isStarred.toggle()
+                                            try? context.save()
+                                        } label: {
+                                            Image(systemName: word.isStarred ? "star.slash" : "star.fill")
+                                        }
+                                        .tint(.yellow)
                                     }
                             }
                         }
@@ -55,6 +72,17 @@ struct VocabListView: View {
                 }
             }
             .toolbar {
+                // 星印のみ表示(黄=絞り込み中)。この状態で再生すると星印だけ流れる
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            starredOnly.toggle()
+                        }
+                    } label: {
+                        Image(systemName: starredOnly ? "star.fill" : "star")
+                            .foregroundStyle(starredOnly ? Color.yellow : Color.accentColor)
+                    }
+                }
                 // 再生パターンの設定
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -78,7 +106,7 @@ struct VocabListView: View {
                         if player.isPlaying {
                             player.stop()
                         } else {
-                            player.play(words)
+                            player.play(visibleWords)
                         }
                     } label: {
                         Image(systemName: player.isPlaying ? "stop.circle.fill" : "play.circle.fill")
@@ -116,9 +144,16 @@ struct VocabListView: View {
         let isExpanded = expandedIDs.contains(word.persistentModelID)
         let isCurrent = player.currentID == word.persistentModelID
         return VStack(alignment: .leading, spacing: 8) {
-            Text(word.english)
-                .font(.body)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                Text(word.english)
+                    .font(.body)
+                Spacer(minLength: 0)
+                if word.isStarred {
+                    Image(systemName: "star.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.yellow)
+                }
+            }
             if isExpanded {
                 Text(word.japanese)
                     .font(.subheadline)
@@ -144,9 +179,9 @@ struct VocabListView: View {
                 }
             }
         }
-        // 長押しでこの単語から連続再生を開始
+        // 長押しでこの単語から連続再生を開始(絞り込み中は星印だけ)
         .onLongPressGesture {
-            player.play(words, from: word)
+            player.play(visibleWords, from: word)
         }
     }
 }

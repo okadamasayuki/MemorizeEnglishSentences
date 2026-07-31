@@ -39,6 +39,8 @@ final class VocabWord {
     var index: Int
     var english: String
     var japanese: String
+    /// 星印(お気に入り)
+    var isStarred: Bool = false
 
     init(index: Int, english: String, japanese: String) {
         self.index = index
