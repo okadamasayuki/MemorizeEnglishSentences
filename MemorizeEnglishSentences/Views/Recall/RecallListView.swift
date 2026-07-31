@@ -55,8 +55,15 @@ struct RecallListView: View {
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
+                            // 「削除」の文字なし、ゴミ箱アイコンだけのスワイプ削除
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    delete(passage)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                            }
                         }
-                        .onDelete(perform: delete)
                         .onMove(perform: move)
                     }
                     .listStyle(.plain)
@@ -122,10 +129,8 @@ struct RecallListView: View {
         try? context.save()
     }
 
-    private func delete(at offsets: IndexSet) {
-        for offset in offsets {
-            context.delete(visiblePassages[offset])
-        }
+    private func delete(_ passage: Passage) {
+        context.delete(passage)
         try? context.save()
     }
 
