@@ -23,7 +23,8 @@ struct RecallSessionView: View {
                     // 習熟ステータス(アイコンで選択)
                     HStack(spacing: 44) {
                         Spacer()
-                        ForEach(MemorizationStatus.allCases) { status in
+                        // 「どちらでもない」はアイコンなし = どちらも未選択の状態
+                        ForEach([MemorizationStatus.needsReview, .memorized]) { status in
                             statusButton(for: status)
                         }
                         Spacer()
@@ -128,7 +129,8 @@ struct RecallSessionView: View {
     private func statusButton(for status: MemorizationStatus) -> some View {
         let isSelected = passage.memorizationStatus == status
         return Button {
-            passage.memorizationStatus = status
+            // 選択中をもう一度タップすると解除(どちらでもない)に戻る
+            passage.memorizationStatus = isSelected ? .normal : status
             try? context.save()
         } label: {
             Image(systemName: status.iconName)

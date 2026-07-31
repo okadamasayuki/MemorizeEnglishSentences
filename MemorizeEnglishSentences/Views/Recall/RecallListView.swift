@@ -84,10 +84,14 @@ struct RecallListView: View {
         try? context.save()
     }
 
+    @ViewBuilder
     private func statusBadge(_ status: MemorizationStatus) -> some View {
-        Image(systemName: status.iconName)
-            .font(.footnote)
-            .foregroundStyle(status.color)
+        // 「どちらでもない」はアイコンなし
+        if status != .normal {
+            Image(systemName: status.iconName)
+                .font(.footnote)
+                .foregroundStyle(status.color)
+        }
     }
 }
 
