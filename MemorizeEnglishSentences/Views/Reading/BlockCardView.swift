@@ -38,6 +38,14 @@ struct BlockCardView: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(.secondarySystemBackground))
         )
+        // どこまで読んだかの目印(しおり)
+        .overlay(alignment: .topTrailing) {
+            if block.isMarked {
+                Image(systemName: "bookmark.fill")
+                    .foregroundStyle(.orange)
+                    .padding(10)
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: 12))
         .onTapGesture {
             onToggle()

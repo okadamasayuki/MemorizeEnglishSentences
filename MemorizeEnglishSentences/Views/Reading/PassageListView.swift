@@ -21,6 +21,7 @@ struct PassageListView: View {
     @State private var retryConfiguration: TranslationSession.Configuration?
     @State private var isSelecting = false
     @State private var selection = Set<PersistentIdentifier>()
+    @State private var scrollProxy: ScrollViewProxy?
 
     private var blocks: [Block] {
         passages.flatMap { $0.orderedBlocks }
@@ -36,26 +37,41 @@ struct PassageListView: View {
                         description: Text("右上の + から英文を登録しましょう。音声入力でも写真でも OK です。")
                     )
                 } else {
-                    List {
-                        ForEach(blocks) { block in
-                            blockRow(block)
-                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) {
-                                        delete(block)
-                                    } label: {
-                                        Image(systemName: "trash")
+                    ScrollViewReader { proxy in
+                        List {
+                            ForEach(blocks) { block in
+                                blockRow(block)
+                                    .id(block.persistentModelID)
+                                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                    .listRowSeparator(.hidden)
+                                    .listRowBackground(Color.clear)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button(role: .destructive) {
+                                            delete(block)
+                                        } label: {
+                                            Image(systemName: "trash")
+                                        }
                                     }
-                                }
+                                    // 右スワイプでどこまで読んだかの目印を付ける
+                                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                        Button {
+                                            toggleMark(block)
+                                        } label: {
+                                            Image(systemName: block.isMarked ? "bookmark.slash" : "bookmark.fill")
+                                        }
+                                        .tint(.orange)
+                                    }
+                            }
+                        }
+                        .listStyle(.plain)
+                        // 選択モード中は背景色を少し変えてわかるようにする
+                        .scrollContentBackground(.hidden)
+                        .background(isSelecting ? Color.red.opacity(0.07) : Color(.systemBackground))
+                        .animation(.easeInOut(duration: 0.2), value: isSelecting)
+                        .onAppear {
+                            scrollProxy = proxy
                         }
                     }
-                    .listStyle(.plain)
-                    // 選択モード中は背景色を少し変えてわかるようにする
-                    .scrollContentBackground(.hidden)
-                    .background(isSelecting ? Color.red.opacity(0.07) : Color(.systemBackground))
-                    .animation(.easeInOut(duration: 0.2), value: isSelecting)
                 }
             }
             .toolbar {
@@ -69,6 +85,19 @@ struct PassageListView: View {
                         } label: {
                             Image(systemName: isSelecting ? "checkmark.circle.fill" : "checkmark.circle")
                                 .foregroundStyle(isSelecting ? Color.red : Color.accentColor)
+                        }
+                    }
+                    // 目印(しおり)へジャンプ
+                    if let marked = blocks.first(where: { $0.isMarked }), !isSelecting {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                withAnimation {
+                                    scrollProxy?.scrollTo(marked.persistentModelID, anchor: .center)
+                                }
+                            } label: {
+                                Image(systemName: "bookmark.fill")
+                                    .foregroundStyle(.orange)
+                            }
                         }
                     }
                 }
@@ -139,6 +168,16 @@ struct PassageListView: View {
                     }
             }
         }
+    }
+
+    /// どこまで読んだかの目印。全体で 1 か所だけ(付け直すと移動、同じ場所なら解除)
+    private func toggleMark(_ block: Block) {
+        let wasMarked = block.isMarked
+        for other in blocks where other.isMarked {
+            other.isMarked = false
+        }
+        block.isMarked = !wasMarked
+        try? context.save()
     }
 
     private func delete(_ block: Block) {

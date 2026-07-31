@@ -86,6 +86,8 @@ final class Block {
     var englishText: String
     /// nil = 未翻訳(閲覧時に遅延リトライ)
     var japaneseText: String?
+    /// どこまで音読したかの目印(しおり)。全体で 1 か所だけ true にする
+    var isMarked: Bool = false
     var passage: Passage?
 
     init(index: Int, englishText: String, japaneseText: String? = nil) {
