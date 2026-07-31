@@ -7,6 +7,20 @@ private struct SelectedWord: Identifiable {
     let word: String
 }
 
+/// 単語の意味データ。ポップアップ(シート)が直接監視する。
+/// (シートのコンテンツは最初の表示時に親の @State の更新を
+///  取りこぼすことがあるため、ObservableObject で確実に反映させる)
+@MainActor
+final class WordMeaningModel: ObservableObject {
+    @Published var japanese: String?
+    @Published var failed = false
+
+    func reset() {
+        japanese = nil
+        failed = false
+    }
+}
+
 private struct TranslationTimeoutError: Error {}
 
 /// 翻訳にタイムアウトを付ける(起動直後はエラーも返さず固まることがあるため)
@@ -83,8 +97,7 @@ struct PassageListView: View {
     @State private var showingAdd = false
     @State private var expandedBlockIDs: Set<PersistentIdentifier> = []
     @State private var selectedWord: SelectedWord?
-    @State private var wordJapanese: String?
-    @State private var wordFailed = false
+    @StateObject private var wordMeaning = WordMeaningModel()
     @State private var wordBroker = WordTranslationBroker()
     @State private var warmupRetryCount = 0
     @State private var wordConfiguration: TranslationSession.Configuration?
@@ -194,7 +207,7 @@ struct PassageListView: View {
                 AddPassageView(purpose: .reading)
             }
             .sheet(item: $selectedWord) { selected in
-                WordPopupView(word: selected.word, japanese: wordJapanese, failed: wordFailed)
+                WordPopupView(word: selected.word, meaning: wordMeaning)
             }
             // 単語の翻訳(常駐セッション 1 本に、タップされた単語をストリームで流し込む)
             .translationTask(wordConfiguration) { session in
@@ -223,7 +236,7 @@ struct PassageListView: View {
                         let translated = try await translate(session, target, timeoutSeconds: 10)
                         print("[WT] translated '\(target)' -> \(translated)")
                         if selectedWord?.word == target {
-                            wordJapanese = translated
+                            wordMeaning.japanese = translated
                         }
                         saveWordCache(target, translated)
                     } catch {
@@ -236,7 +249,7 @@ struct PassageListView: View {
                             return
                         }
                         if selectedWord?.word == target {
-                            wordFailed = true
+                            wordMeaning.failed = true
                         }
                     }
                 }
@@ -297,13 +310,12 @@ struct PassageListView: View {
     /// 単語の意味を表示: 内蔵辞書 → キャッシュ → Apple 翻訳の順で解決
     private func showWord(_ word: String) {
         print("[WT] tap word='\(word)'")
-        wordJapanese = nil
-        wordFailed = false
+        wordMeaning.reset()
         selectedWord = SelectedWord(word: word)
 
         if let entry = BasicWordDictionary.lookup(word) {
             print("[WT] dict hit: \(entry)")
-            wordJapanese = entry
+            wordMeaning.japanese = entry
             return
         }
         let target = word
@@ -312,7 +324,7 @@ struct PassageListView: View {
         )
         if let cached = try? context.fetch(descriptor).first {
             print("[WT] cache hit: \(cached.japanese)")
-            wordJapanese = cached.japanese
+            wordMeaning.japanese = cached.japanese
             return
         }
         print("[WT] no dict/cache -> requesting translation")

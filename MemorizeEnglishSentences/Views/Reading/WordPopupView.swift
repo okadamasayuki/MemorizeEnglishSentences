@@ -5,8 +5,10 @@ import SwiftUI
 /// (シート内で translationTask を使うと iOS がクラッシュするため)。
 struct WordPopupView: View {
     let word: String
-    let japanese: String?
-    let failed: Bool
+    @ObservedObject var meaning: WordMeaningModel
+
+    private var japanese: String? { meaning.japanese }
+    private var failed: Bool { meaning.failed }
 
     var body: some View {
         VStack(spacing: 12) {
