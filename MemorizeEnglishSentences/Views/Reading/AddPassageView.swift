@@ -42,9 +42,11 @@ struct AddPassageView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") {
+                    Button {
                         speech.stop()
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -80,7 +82,7 @@ struct AddPassageView: View {
 
     private var navigationTitle: String {
         switch step {
-        case .input: "英文を入力"
+        case .input: ""
         case .preview: "文の分割を確認"
         case .translate: "翻訳して保存"
         }
@@ -109,14 +111,6 @@ struct AddPassageView: View {
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color(.systemGray4), lineWidth: 1)
                 )
-                .overlay(alignment: .topLeading) {
-                    if text.isEmpty, !speech.isRecording {
-                        Text("英文を音声入力するか、ここに入力・ペーストしてください")
-                            .foregroundStyle(.tertiary)
-                            .padding(8)
-                            .allowsHitTesting(false)
-                    }
-                }
 
             if speech.isRecording, !speech.partialText.isEmpty {
                 Text(speech.partialText)
