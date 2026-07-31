@@ -109,10 +109,15 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         (phase == 0 ? englishSynthesizer : japaneseSynthesizer).speak(utterance)
     }
 
-    /// 読み上げ用に記号を取り除く(「〜を変える」→「を変える」など)。
-    /// 記号が混ざるとイントネーションが崩れるため。表示側はそのまま。
+    /// 読み上げ用に記号を取り除く。表示側はそのまま。
+    /// 「〜を変える」は先頭の助詞ごと省いて「変える」と読む。
     static func spokenJapanese(_ text: String) -> String {
         var spoken = text
+        // 先頭の「〜を」「〜に」などの助詞は読まない
+        let leadingParticles = ["〜を", "〜に", "〜と", "〜が", "〜の", "〜へ", "〜で", "〜から"]
+        if let particle = leadingParticles.first(where: { spoken.hasPrefix($0) }) {
+            spoken.removeFirst(particle.count)
+        }
         spoken = spoken.replacingOccurrences(of: "〜", with: "")
         spoken = spoken.replacingOccurrences(of: "・", with: "、")
         spoken = spoken.replacingOccurrences(of: "(", with: "、")
