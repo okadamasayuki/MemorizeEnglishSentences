@@ -55,6 +55,7 @@ struct RecallDiffView: View {
         }
         .navigationTitle("採点結果")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
     }
 
     private func accuracyHeader(_ diff: DiffResult) -> some View {

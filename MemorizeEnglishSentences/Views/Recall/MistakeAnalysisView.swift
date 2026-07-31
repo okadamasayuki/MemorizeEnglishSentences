@@ -69,6 +69,7 @@ struct MistakeAnalysisView: View {
         }
         .navigationTitle("間違い分析")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
     }
 
     // MARK: - ヒートマップ(間違え頻度が高い単語ほど濃い赤背景)

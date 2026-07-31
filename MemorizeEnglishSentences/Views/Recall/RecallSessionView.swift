@@ -84,6 +84,8 @@ struct RecallSessionView: View {
         .background(passage.memorizationStatus.color.opacity(0.06).ignoresSafeArea())
         .animation(.easeInOut(duration: 0.25), value: passage.memorizationStatus)
         .navigationBarTitleDisplayMode(.inline)
+        // 暗記中は下のタブバーを隠す
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 NavigationLink {
