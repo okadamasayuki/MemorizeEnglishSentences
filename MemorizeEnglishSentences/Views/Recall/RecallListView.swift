@@ -50,6 +50,8 @@ struct RecallListView: View {
                                 NavigationLink(value: passage) { EmptyView() }
                                     .opacity(0)
                             )
+                            // 長押しドラッグ時はグレーのカード部分だけを持ち上げる
+                            .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 12))
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
