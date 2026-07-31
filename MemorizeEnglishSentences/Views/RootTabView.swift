@@ -16,6 +16,7 @@ struct RootTabView: View {
             SampleData.seedIfNeeded(context: context)
             SampleData.applyDefaultStatusIfNeeded(context: context)
             SampleData.splitReadingAndRecallIfNeeded(context: context)
+            SampleData.seedBookPhotosIfNeeded(context: context)
         }
     }
 }

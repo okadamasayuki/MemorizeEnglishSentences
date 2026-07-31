@@ -70,6 +70,61 @@ enum SampleData {
         ),
     ]
 
+    /// ユーザーが撮影した書籍ページから読み取った暗記用の例文(英文, 和訳)
+    private static let bookPhotoSentences: [(String, String)] = [
+        ("Tom finally realized his dream of becoming an astronaut, but at the expense of many other things.",
+         "トムはついに宇宙飛行士になるという夢を実現したが、他の多くのことを犠牲にした。"),
+        ("If city life gives you stress and fatigue, it is best to relax in the mountains or on beaches in order to relieve them.",
+         "都会の生活でストレスや疲れがたまったら、それを解消するために山の中や海辺でのんびりするのが一番だ。"),
+        ("In Japan, women have difficulty getting promoted or returning to their jobs after giving birth and raising their children.",
+         "日本では、女性は出産して子供を育てたあとに昇進したり職場に復帰したりするのが難しい。"),
+        ("In the U.S., parents drive their children everywhere until they are old enough to get a driver's license.",
+         "アメリカでは、子供が運転免許を取れる年齢になるまで、親がどこへ行くにも車で送っていく。"),
+        ("\"Excuse me. Could you tell me how to get to the post office?\" \"Go straight for two blocks, then turn left. You'll find it on your right.\"",
+         "「すみません、郵便局への行き方を教えていただけますか。」「2筋まっすぐ行って、左に曲がってください。右側にありますよ。」"),
+        ("\"What do you think of our new teacher?\" \"There is something about her that attracts me.\"",
+         "「新しい先生のことをどう思う?」「彼女にはどこか惹かれるところがあるんだ。」"),
+        ("People who do not feel guilty about occupying two seats on a crowded train really make me angry.",
+         "混んだ電車で2人分の席を占領して平気な人には、本当に腹が立つ。"),
+        ("When I left the office for lunch, I ran into an old friend from high school.",
+         "昼食をとりに会社を出たとき、高校時代の旧友にばったり出会った。"),
+        ("This music is worth listening to over and over again. I recommend it.",
+         "この音楽は何度も繰り返し聴く価値がある。ぜひ聴いてみたらいい。"),
+        ("Bear in mind that if you have enthusiasm, you can succeed in anything.",
+         "熱意があればどんなことでも成功できるということを、心に留めておきなさい。"),
+        ("Everyone is born with a talent. The question is whether they can find it or not.",
+         "人は誰でも生まれながらに才能を持っている。問題は、それを見つけられるかどうかだ。"),
+        ("Teeth play an important role in your health. If you want to stay healthy, you should brush your teeth after every meal.",
+         "歯は健康に重要な役割を果たしている。健康でいたいなら、毎食後に歯を磨くべきだ。"),
+    ]
+
+    /// 書籍ページ写真から読み取った例文を暗記タブへ一度だけ投入する。
+    /// 既に同じ英文が登録されている場合は重複させない。
+    static func seedBookPhotosIfNeeded(context: ModelContext) {
+        let key = "didSeedBookPhotos_v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+
+        let descriptor = FetchDescriptor<Passage>()
+        let existing = (try? context.fetch(descriptor)) ?? []
+        let existingEnglish = Set(
+            existing.filter { $0.purpose == .recall }.map { $0.englishFullText }
+        )
+
+        // createdAt をずらして、一覧に書籍と同じ順で上から並ぶようにする
+        let base = Date.now
+        for (offset, pair) in bookPhotoSentences.enumerated() where !existingEnglish.contains(pair.0) {
+            let passage = Passage(title: pair.1, createdAt: base.addingTimeInterval(-Double(offset)))
+            passage.purpose = .recall
+            context.insert(passage)
+            let block = Block(index: 0, englishText: pair.0, japaneseText: pair.1)
+            block.passage = passage
+            context.insert(block)
+        }
+
+        try? context.save()
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     /// ステータス機能導入時に「要復習」で入った既存データを一度だけ「普通」に揃える
     static func applyDefaultStatusIfNeeded(context: ModelContext) {
         let key = "didDefaultStatusToNormal"
