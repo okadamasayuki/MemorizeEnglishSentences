@@ -13,7 +13,6 @@ struct MemorizeEnglishSentencesApp: App {
             Block.self,
             WordCacheEntry.self,
             RecallAttempt.self,
-            SyntaxCacheEntry.self,
         ])
     }
 }

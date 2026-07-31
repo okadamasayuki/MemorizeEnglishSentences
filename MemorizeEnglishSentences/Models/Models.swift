@@ -117,17 +117,3 @@ final class RecallAttempt {
     }
 }
 
-@Model
-final class SyntaxCacheEntry {
-    @Attribute(.unique) var sentenceHash: String
-    var sentence: String
-    var resultJSON: String
-    var updatedAt: Date
-
-    init(sentenceHash: String, sentence: String, resultJSON: String, updatedAt: Date = .now) {
-        self.sentenceHash = sentenceHash
-        self.sentence = sentence
-        self.resultJSON = resultJSON
-        self.updatedAt = updatedAt
-    }
-}
