@@ -159,6 +159,12 @@ struct PassageListView: View {
             }
             // 単語の翻訳(常駐セッション 1 本に、タップされた単語をストリームで流し込む)
             .translationTask(wordConfiguration) { session in
+                // シートが開く前にダミー翻訳でセッションを完全初期化しておく。
+                // 翻訳フレームワークは初回実行時に裏で UI を接続するため、
+                // それがシート表示中に起きると初回の翻訳が完了しない。
+                try? await session.prepareTranslation()
+                _ = try? await session.translate("hello")
+
                 for await target in wordBroker.requests() {
                     do {
                         let response = try await session.translate(target)
