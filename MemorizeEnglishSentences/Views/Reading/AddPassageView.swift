@@ -222,6 +222,7 @@ struct AddPassageView: View {
             List {
                 Section {
                     ForEach(sentences.indices, id: \.self) { index in
+                        let suspicious = SentenceValidator.misspelledWords(in: sentences[index])
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text("\(index + 1)")
@@ -261,7 +262,6 @@ struct AddPassageView: View {
                             }
 
                             // 読み取りミスの可能性がある語を警告(スペルチェック)
-                            let suspicious = SentenceValidator.misspelledWords(in: sentences[index])
                             if !suspicious.isEmpty {
                                 Label("英文として不自然な語: \(suspicious.joined(separator: ", "))", systemImage: "exclamationmark.triangle.fill")
                                     .font(.caption)
@@ -269,13 +269,17 @@ struct AddPassageView: View {
                             }
                         }
                         .padding(.vertical, 4)
+                        // 不自然な語がある行は背景をオレンジに
+                        .listRowBackground(
+                            suspicious.isEmpty
+                                ? Color(.secondarySystemGroupedBackground)
+                                : Color.orange.opacity(0.13)
+                        )
                     }
                     .onDelete { offsets in
                         sentences.remove(atOffsets: offsets)
                         editingIndex = nil
                     }
-                } footer: {
-                    Text("1 行が 1 ブロックとして保存されます。文をタップすると編集できます。オレンジの語は写真の読み取りミスの可能性があるため、編集または左スワイプで削除してから進んでください。")
                 }
             }
         }
