@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct RootTabView: View {
+    @Environment(\.modelContext) private var context
+
     var body: some View {
         TabView {
             Tab("音読", systemImage: "book.fill") {
@@ -12,6 +14,9 @@ struct RootTabView: View {
             Tab("設定", systemImage: "gearshape.fill") {
                 SettingsView()
             }
+        }
+        .task {
+            SampleData.seedIfNeeded(context: context)
         }
     }
 }
