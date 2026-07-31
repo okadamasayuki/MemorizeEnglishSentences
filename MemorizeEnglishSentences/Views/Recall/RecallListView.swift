@@ -48,6 +48,8 @@ struct RecallListView: View {
                     .listStyle(.plain)
                 }
             }
+            // 一覧では明示的にタブバーを表示(戻り遷移と同時に復元させる)
+            .toolbar(.visible, for: .tabBar)
             .navigationDestination(for: Passage.self) { passage in
                 RecallSessionView(passage: passage)
             }
