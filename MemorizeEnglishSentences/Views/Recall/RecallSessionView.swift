@@ -32,18 +32,12 @@ struct RecallSessionView: View {
 
                     Divider()
 
-                    Text("日本語訳")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(passage.japaneseFullText.isEmpty ? "(和訳がありません — 音読タブで翻訳してください)" : passage.japaneseFullText)
+                    Text(passage.japaneseFullText.isEmpty ? "(和訳がありません — 登録し直して翻訳してください)" : passage.japaneseFullText)
                         .font(.body)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     if showAnswer {
                         Divider()
-                        Text("正解英文")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                         Text(referenceText)
                             .font(.body)
                             .foregroundStyle(.blue)
@@ -103,14 +97,9 @@ struct RecallSessionView: View {
                     editingTitle = passage.title
                     showRenameAlert = true
                 } label: {
-                    HStack(spacing: 4) {
-                        Text(passage.title)
-                            .font(.headline)
-                            .lineLimit(1)
-                        Image(systemName: "pencil")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(passage.title)
+                        .font(.headline)
+                        .lineLimit(1)
                 }
                 .buttonStyle(.plain)
             }
