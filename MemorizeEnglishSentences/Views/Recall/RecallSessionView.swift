@@ -29,14 +29,11 @@ struct RecallSessionView: View {
                         Spacer()
                     }
 
-                    Divider()
-
                     Text(passage.japaneseFullText.isEmpty ? "(和訳がありません — 登録し直して翻訳してください)" : passage.japaneseFullText)
                         .font(.body)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     if showAnswer {
-                        Divider()
                         Text(referenceText)
                             .font(.body)
                             .foregroundStyle(.blue)
@@ -44,7 +41,6 @@ struct RecallSessionView: View {
                     }
 
                     if !speech.fullText.isEmpty || speech.isRecording {
-                        Divider()
                         Text("認識中のテキスト")
                             .font(.caption)
                             .foregroundStyle(.secondary)
