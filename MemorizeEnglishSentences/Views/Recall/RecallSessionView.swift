@@ -9,8 +9,6 @@ struct RecallSessionView: View {
 
     @State private var speech = SpeechRecognitionService()
     @State private var showAnswer = false
-    @State private var showRenameAlert = false
-    @State private var editingTitle = ""
     @State private var resultAttempt: RecallAttempt?
     @State private var showResult = false
 
@@ -91,25 +89,6 @@ struct RecallSessionView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            // タイトルをタップするとすぐ編集ダイアログが開く
-            ToolbarItem(placement: .principal) {
-                Button {
-                    editingTitle = passage.title
-                    showRenameAlert = true
-                } label: {
-                    Text(passage.title)
-                        .font(.headline)
-                        .lineLimit(1)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .overlay {
-            if showRenameAlert {
-                renameDialog
-            }
-        }
-        .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 NavigationLink {
                     MistakeAnalysisView(passage: passage)
@@ -130,49 +109,6 @@ struct RecallSessionView: View {
         .onDisappear {
             speech.stop()
             try? context.save()
-        }
-    }
-
-    /// タイトル編集ダイアログ(見出しなし・上下の余白を均等に)
-    private var renameDialog: some View {
-        ZStack {
-            Color.black.opacity(0.25)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    showRenameAlert = false
-                }
-
-            VStack(spacing: 14) {
-                TextField("タイトル", text: $editingTitle)
-                    .textFieldStyle(.roundedBorder)
-
-                HStack(spacing: 10) {
-                    Button("キャンセル", role: .cancel) {
-                        showRenameAlert = false
-                    }
-                    .buttonStyle(.bordered)
-                    .frame(maxWidth: .infinity)
-
-                    Button("保存") {
-                        let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            passage.title = trimmed
-                            try? context.save()
-                        }
-                        showRenameAlert = false
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity)
-                    .disabled(editingTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(.systemBackground))
-            )
-            .frame(maxWidth: 300)
-            .shadow(color: .black.opacity(0.2), radius: 20)
         }
     }
 
