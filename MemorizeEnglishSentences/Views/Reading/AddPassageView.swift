@@ -24,6 +24,9 @@ struct AddPassageView: View {
     @State private var isRecognizing = false
     @State private var ocrError: String?
 
+    @State private var editingIndex: Int?
+    @FocusState private var focusedIndex: Int?
+
     var body: some View {
         NavigationStack {
             Group {
@@ -194,44 +197,97 @@ struct AddPassageView: View {
     // MARK: - ② 文分割プレビュー
 
     private var previewStep: some View {
-        List {
-            Section {
-                ForEach(sentences.indices, id: \.self) { index in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("\(index + 1)")
-                                .font(.caption.bold())
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            if index > 0 {
-                                Button {
-                                    mergeWithPrevious(index)
-                                } label: {
-                                    Label("前と結合", systemImage: "arrow.turn.left.up")
-                                        .font(.caption)
+        VStack(spacing: 0) {
+            // 一番上に不自然な語の合計数を表示
+            let total = totalSuspiciousCount
+            if total > 0 {
+                Label("英文として不自然な語が \(total) 個あります", systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote.bold())
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(Color.orange.opacity(0.12))
+            }
+
+            List {
+                Section {
+                    ForEach(sentences.indices, id: \.self) { index in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("\(index + 1)")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                if editingIndex == index {
+                                    Button("完了") {
+                                        editingIndex = nil
+                                        focusedIndex = nil
+                                    }
+                                    .font(.caption)
+                                    .buttonStyle(.borderless)
+                                } else if index > 0 {
+                                    Button {
+                                        mergeWithPrevious(index)
+                                    } label: {
+                                        Label("前と結合", systemImage: "arrow.turn.left.up")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.borderless)
                                 }
-                                .buttonStyle(.borderless)
+                            }
+
+                            if editingIndex == index {
+                                TextField("英文", text: $sentences[index], axis: .vertical)
+                                    .focused($focusedIndex, equals: index)
+                            } else {
+                                // 不自然な語をオレンジ色でハイライト(タップで編集)
+                                Text(highlighted(sentences[index]))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        editingIndex = index
+                                        focusedIndex = index
+                                    }
+                            }
+
+                            // 読み取りミスの可能性がある語を警告(スペルチェック)
+                            let suspicious = SentenceValidator.misspelledWords(in: sentences[index])
+                            if !suspicious.isEmpty {
+                                Label("英文として不自然な語: \(suspicious.joined(separator: ", "))", systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
                             }
                         }
-                        TextField("英文", text: $sentences[index], axis: .vertical)
-
-                        // 読み取りミスの可能性がある語を警告(スペルチェック)
-                        let suspicious = SentenceValidator.misspelledWords(in: sentences[index])
-                        if !suspicious.isEmpty {
-                            Label("英文として不自然な語: \(suspicious.joined(separator: ", "))", systemImage: "exclamationmark.triangle.fill")
-                                .font(.caption)
-                                .foregroundStyle(.orange)
-                        }
+                        .padding(.vertical, 4)
                     }
-                    .padding(.vertical, 4)
+                    .onDelete { offsets in
+                        sentences.remove(atOffsets: offsets)
+                        editingIndex = nil
+                    }
+                } footer: {
+                    Text("1 行が 1 ブロックとして保存されます。文をタップすると編集できます。オレンジの語は写真の読み取りミスの可能性があるため、編集または左スワイプで削除してから進んでください。")
                 }
-                .onDelete { offsets in
-                    sentences.remove(atOffsets: offsets)
-                }
-            } footer: {
-                Text("1 行が 1 ブロックとして保存されます。⚠️ が付いた行は写真の読み取りミスの可能性があるため、編集または左スワイプで削除してから進んでください。")
             }
         }
+    }
+
+    private var totalSuspiciousCount: Int {
+        sentences.reduce(0) { $0 + SentenceValidator.misspelledWords(in: $1).count }
+    }
+
+    /// 不自然な語をオレンジ色にした表示用テキスト
+    private func highlighted(_ sentence: String) -> AttributedString {
+        var attributed = AttributedString(sentence)
+        for word in Set(SentenceValidator.misspelledWords(in: sentence)) {
+            var searchStart = sentence.startIndex
+            while let range = sentence.range(of: word, range: searchStart..<sentence.endIndex) {
+                if let attrRange = Range(range, in: attributed) {
+                    attributed[attrRange].foregroundColor = .orange
+                }
+                searchStart = range.upperBound
+            }
+        }
+        return attributed
     }
 
     private func mergeWithPrevious(_ index: Int) {
