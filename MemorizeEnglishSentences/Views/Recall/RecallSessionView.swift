@@ -63,8 +63,6 @@ struct RecallSessionView: View {
                 }
             }
 
-            Divider()
-
             HStack(spacing: 44) {
                 Spacer()
                 // 音声で回答
