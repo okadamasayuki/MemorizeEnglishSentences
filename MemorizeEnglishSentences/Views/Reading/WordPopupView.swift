@@ -13,47 +13,42 @@ struct WordPopupView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Text(word)
-                .font(.title2.bold())
-
-            // 音声が聞けない場面用の読み方の目安
-            let pronunciation = KatakanaPronunciation.katakana(for: word)
-            if !pronunciation.isEmpty {
-                Text("読み方の目安: \(pronunciation)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Group {
+            // 英単語の右に日本語訳を表示
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(word)
+                    .font(.title2.bold())
                 if let japanese {
+                    Text(":")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
                     Text(japanese)
                         .font(.title3)
                 } else if failed {
-                    Text("翻訳できませんでした")
+                    Text("(翻訳できませんでした)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
                     ProgressView()
                 }
             }
-            .frame(minHeight: 32)
 
-            HStack(spacing: 12) {
-                Button {
-                    SpeechSynthesisService.shared.speak(word)
-                } label: {
-                    Label("発音", systemImage: "speaker.wave.2.fill")
-                }
-                Button {
-                    SpeechSynthesisService.shared.speak(word, slow: true)
-                } label: {
-                    Label("ゆっくり", systemImage: "tortoise.fill")
-                }
+            // 音声が聞けない場面用の読み方(カタカナ)
+            let pronunciation = KatakanaPronunciation.katakana(for: word)
+            if !pronunciation.isEmpty {
+                Text(pronunciation)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button {
+                SpeechSynthesisService.shared.speak(word)
+            } label: {
+                Label("発音", systemImage: "speaker.wave.2.fill")
             }
             .buttonStyle(.bordered)
         }
         .padding()
-        .presentationDetents([.height(260)])
+        .presentationDetents([.height(220)])
         .presentationDragIndicator(.visible)
         .task {
             loadFromCacheOrTranslate()
