@@ -13,9 +13,9 @@ struct RecallSessionView: View {
     @State private var resultAttempt: RecallAttempt?
     @State private var showResult = false
 
-    // ヒント: 各単語の頭文字を並べ、タップするたびに先頭から 1 単語ずつ開く
+    // ヒント: 文中の重要単語(キーワード)だけを語順どおりに表示
     @State private var showHint = false
-    @State private var hintRevealedCount = 0
+    @State private var hintKeywords: [String] = []
 
     // 単語長押しで和訳+発音
     @State private var selectedWord: SelectedWord?
@@ -47,34 +47,10 @@ struct RecallSessionView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     if showHint {
-                        let tokens = WordTokenizer.tokenize(referenceText)
-                        FlowLayout(spacing: 5, lineSpacing: 8) {
-                            ForEach(tokens) { token in
-                                if token.id < hintRevealedCount {
-                                    Text(token.display)
-                                        .font(.body)
-                                } else {
-                                    Text(hintMask(token))
-                                        .font(.body)
-                                        .foregroundStyle(.secondary)
-                                        .padding(.horizontal, 4)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 4)
-                                                .fill(Color(.secondarySystemBackground))
-                                        )
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        // ヒント部分をタップするたびに次の 1 単語を開く
-                        .onTapGesture {
-                            if hintRevealedCount < tokens.count {
-                                withAnimation(.easeInOut(duration: 0.1)) {
-                                    hintRevealedCount += 1
-                                }
-                            }
-                        }
+                        Text(hintKeywords.joined(separator: " ・ "))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     if showAnswer {
@@ -155,12 +131,12 @@ struct RecallSessionView: View {
         // 暗記中は下のタブバーを隠す
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
-            // ヒント(頭文字の並び。タップで 1 単語ずつ開く)
+            // ヒント(文中のキーワードだけを語順どおりに表示)
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) {
                         if !showHint {
-                            hintRevealedCount = 0
+                            hintKeywords = buildHintKeywords()
                         }
                         showHint.toggle()
                     }
@@ -263,10 +239,48 @@ struct RecallSessionView: View {
         speech.fullText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// まだ開いていない単語のマスク表示(頭文字だけ見せる)
-    private func hintMask(_ token: WordToken) -> String {
-        guard let first = token.display.first else { return "…" }
-        return String(first) + "…"
+    /// 冠詞・代名詞・前置詞などの機能語(キーワードにしない語)
+    private static let functionWords: Set<String> = [
+        "a", "an", "the",
+        "i", "you", "he", "she", "it", "we", "they",
+        "me", "him", "her", "us", "them",
+        "my", "your", "his", "its", "our", "their", "mine", "yours",
+        "myself", "yourself", "himself", "herself", "itself", "ourselves", "themselves",
+        "this", "that", "these", "those", "there", "here",
+        "is", "am", "are", "was", "were", "be", "been", "being",
+        "do", "does", "did", "done", "doing",
+        "have", "has", "had", "having",
+        "will", "would", "can", "could", "should", "shall", "may", "might", "must",
+        "and", "or", "but", "so", "because", "if", "when", "while", "as", "than", "then",
+        "to", "of", "in", "on", "at", "by", "for", "with", "from", "about",
+        "into", "over", "under", "after", "before", "between", "through",
+        "out", "up", "down", "off", "not", "no", "nor",
+        "who", "whom", "whose", "what", "which", "how", "where", "why", "whether",
+        "some", "any", "such", "only", "just", "also", "too", "very",
+        "don't", "doesn't", "didn't", "won't", "wouldn't", "can't", "couldn't",
+        "shouldn't", "isn't", "aren't", "wasn't", "weren't", "you'll", "i'm", "it's",
+    ]
+
+    /// ヒント用キーワード: 機能語を除いた重要単語を、語順を保ったまま最大 5 個選ぶ
+    private func buildHintKeywords() -> [String] {
+        let candidates = WordTokenizer.tokenize(referenceText).filter { token in
+            let word = token.normalized.isEmpty ? token.display.lowercased() : token.normalized
+            return !Self.functionWords.contains(word) && word.count >= 2
+        }
+        let maxCount = 5
+        guard candidates.count > maxCount else {
+            return candidates.map(keywordDisplay)
+        }
+        // 文全体にまんべんなく散らばるように等間隔で選ぶ
+        let picked = (0..<maxCount).map { index in
+            candidates[index * (candidates.count - 1) / (maxCount - 1)]
+        }
+        return picked.map(keywordDisplay)
+    }
+
+    /// キーワードの表示形: 末尾の句読点などを取り除く
+    private func keywordDisplay(_ token: WordToken) -> String {
+        token.display.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
     }
 
     /// 単語の意味を表示: 内蔵辞書 → キャッシュ → Apple 翻訳の順で解決
