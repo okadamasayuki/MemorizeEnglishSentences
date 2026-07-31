@@ -97,8 +97,11 @@ struct AddPassageView: View {
 
     private var inputStep: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TextField("タイトル(省略可)", text: $title)
-                .textFieldStyle(.roundedBorder)
+            // タイトルは暗記用の登録でだけ使う(音読は一覧がないため不要)
+            if purpose == .recall {
+                TextField("タイトル(省略可)", text: $title)
+                    .textFieldStyle(.roundedBorder)
+            }
 
             TextEditor(text: $text)
                 .frame(minHeight: 200)
