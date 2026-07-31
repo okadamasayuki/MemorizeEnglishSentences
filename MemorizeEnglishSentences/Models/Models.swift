@@ -40,6 +40,8 @@ final class Passage {
     var memorizationStatusRaw: String = MemorizationStatus.normal.rawValue
     /// PassagePurpose の rawValue(既存データは既定で音読)
     var purposeRaw: String = PassagePurpose.reading.rawValue
+    /// 一覧の手動並び順(小さいほど上。同値は作成日の新しい順)
+    var sortIndex: Int = 0
 
     @Relationship(deleteRule: .cascade, inverse: \Block.passage)
     var blocks: [Block] = []

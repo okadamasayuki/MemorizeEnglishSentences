@@ -5,7 +5,10 @@ struct RecallListView: View {
     @Environment(\.modelContext) private var context
     @Query(
         filter: #Predicate<Passage> { $0.purposeRaw == "recall" },
-        sort: \Passage.createdAt, order: .reverse
+        sort: [
+            SortDescriptor(\Passage.sortIndex),
+            SortDescriptor(\Passage.createdAt, order: .reverse),
+        ]
     ) private var passages: [Passage]
     @State private var showingAdd = false
     @State private var path: [Passage] = []
@@ -51,6 +54,7 @@ struct RecallListView: View {
                             .listRowBackground(Color.clear)
                         }
                         .onDelete(perform: delete)
+                        .onMove(perform: move)
                     }
                     .listStyle(.plain)
                 }
@@ -92,6 +96,27 @@ struct RecallListView: View {
     private func rowText(for passage: Passage) -> String {
         let japanese = passage.japaneseFullText.replacingOccurrences(of: "\n", with: " ")
         return japanese.isEmpty ? passage.title : japanese
+    }
+
+    /// 長押しドラッグでの並べ替え。覚えた!を非表示中でも、
+    /// 隠れている項目の位置は保ったまま表示中の項目だけ並べ替える
+    private func move(from source: IndexSet, to destination: Int) {
+        var visible = visiblePassages
+        visible.move(fromOffsets: source, toOffset: destination)
+
+        var all = passages
+        if hideMemorized {
+            var it = visible.makeIterator()
+            for i in all.indices where all[i].memorizationStatus != .memorized {
+                if let next = it.next() { all[i] = next }
+            }
+        } else {
+            all = visible
+        }
+        for (index, passage) in all.enumerated() {
+            passage.sortIndex = index
+        }
+        try? context.save()
     }
 
     private func delete(at offsets: IndexSet) {
