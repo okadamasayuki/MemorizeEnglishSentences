@@ -70,6 +70,20 @@ enum SampleData {
         ),
     ]
 
+    /// ステータス機能導入時に「要復習」で入った既存データを一度だけ「普通」に揃える
+    static func applyDefaultStatusIfNeeded(context: ModelContext) {
+        let key = "didDefaultStatusToNormal"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let descriptor = FetchDescriptor<Passage>()
+        if let passages = try? context.fetch(descriptor) {
+            for passage in passages where passage.memorizationStatus == .needsReview {
+                passage.memorizationStatus = .normal
+            }
+            try? context.save()
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     static func seedIfNeeded(context: ModelContext) {
         guard !UserDefaults.standard.bool(forKey: seededKey) else { return }
 

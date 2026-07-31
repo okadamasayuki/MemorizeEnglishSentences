@@ -22,8 +22,8 @@ enum MemorizationStatus: String, Codable, CaseIterable, Identifiable {
 final class Passage {
     var title: String
     var createdAt: Date
-    /// MemorizationStatus の rawValue(既存データは既定で「要復習」)
-    var memorizationStatusRaw: String = MemorizationStatus.needsReview.rawValue
+    /// MemorizationStatus の rawValue(既定は「普通」)
+    var memorizationStatusRaw: String = MemorizationStatus.normal.rawValue
 
     @Relationship(deleteRule: .cascade, inverse: \Block.passage)
     var blocks: [Block] = []
@@ -54,7 +54,7 @@ final class Passage {
     }
 
     var memorizationStatus: MemorizationStatus {
-        get { MemorizationStatus(rawValue: memorizationStatusRaw) ?? .needsReview }
+        get { MemorizationStatus(rawValue: memorizationStatusRaw) ?? .normal }
         set { memorizationStatusRaw = newValue.rawValue }
     }
 }

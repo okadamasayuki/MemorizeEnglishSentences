@@ -17,6 +17,7 @@ struct RootTabView: View {
         }
         .task {
             SampleData.seedIfNeeded(context: context)
+            SampleData.applyDefaultStatusIfNeeded(context: context)
         }
     }
 }
