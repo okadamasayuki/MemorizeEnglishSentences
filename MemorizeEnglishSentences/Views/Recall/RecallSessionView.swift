@@ -104,7 +104,7 @@ struct RecallSessionView: View {
                 .buttonStyle(.plain)
             }
         }
-        .alert("タイトルを編集", isPresented: $showRenameAlert) {
+        .alert("", isPresented: $showRenameAlert) {
             TextField("タイトル", text: $editingTitle)
             Button("保存") {
                 let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
