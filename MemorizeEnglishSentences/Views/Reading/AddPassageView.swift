@@ -1,6 +1,7 @@
+import PhotosUI
 import SwiftUI
 
-/// 英文の登録シート(3 ステップ: ① 音声入力/編集 → ② 文分割プレビュー → ③ 翻訳して保存)
+/// 英文の登録シート(3 ステップ: ① 音声入力/写真/編集 → ② 文分割プレビュー → ③ 翻訳して保存)
 struct AddPassageView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -15,6 +16,11 @@ struct AddPassageView: View {
     @State private var text = ""
     @State private var sentences: [String] = []
     @State private var speech = SpeechRecognitionService()
+
+    @State private var photoItem: PhotosPickerItem?
+    @State private var showCamera = false
+    @State private var isRecognizing = false
+    @State private var ocrError: String?
 
     var body: some View {
         NavigationStack {
@@ -116,21 +122,80 @@ struct AddPassageView: View {
                     .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
             }
 
+            if isRecognizing {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("写真から読み取り中...")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             if let error = speech.errorMessage {
                 Text(error)
                     .font(.footnote)
                     .foregroundStyle(.red)
             }
 
-            HStack {
+            if let ocrError {
+                Text(ocrError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+
+            HStack(spacing: 10) {
                 Spacer()
-                DictationButton(speech: speech)
+                DictationButton(speech: speech, label: "音声")
+                Button {
+                    showCamera = true
+                } label: {
+                    Label("カメラ", systemImage: "camera.fill")
+                        .font(.headline)
+                }
+                .buttonStyle(.bordered)
+                .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    Label("写真", systemImage: "photo.fill")
+                        .font(.headline)
+                }
+                .buttonStyle(.bordered)
                 Spacer()
             }
 
             Spacer()
         }
         .padding()
+        .sheet(isPresented: $showCamera) {
+            CameraPicker { image in
+                Task { await recognize(image) }
+            }
+            .ignoresSafeArea()
+        }
+        .onChange(of: photoItem) {
+            guard let photoItem else { return }
+            Task {
+                if let data = try? await photoItem.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    await recognize(image)
+                } else {
+                    ocrError = "写真を読み込めませんでした。"
+                }
+                self.photoItem = nil
+            }
+        }
+    }
+
+    /// 写真から英文を OCR してエディタへ追記する
+    private func recognize(_ image: UIImage) async {
+        ocrError = nil
+        isRecognizing = true
+        defer { isRecognizing = false }
+        do {
+            let recognized = try await TextRecognitionService.recognizeEnglishText(in: image)
+            text = text.isEmpty ? recognized : text + "\n" + recognized
+        } catch {
+            ocrError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
     }
 
     // MARK: - ② 文分割プレビュー
