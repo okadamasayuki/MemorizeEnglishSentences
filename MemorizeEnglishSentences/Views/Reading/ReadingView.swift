@@ -16,6 +16,7 @@ struct ReadingView: View {
     @Environment(\.modelContext) private var context
     let passage: Passage
 
+    @State private var expandedBlockIDs: Set<PersistentIdentifier> = []
     @State private var selectedWord: SelectedWord?
     @State private var selectedSentence: SelectedSentence?
     @State private var retryConfiguration: TranslationSession.Configuration?
@@ -30,6 +31,8 @@ struct ReadingView: View {
                 ForEach(blocks) { block in
                     BlockCardView(
                         block: block,
+                        isExpanded: expandedBlockIDs.contains(block.persistentModelID),
+                        onToggle: { toggle(block) },
                         onWordTap: { word in
                             selectedWord = SelectedWord(word: word)
                         },
@@ -60,6 +63,14 @@ struct ReadingView: View {
                     target: TranslationAvailability.japanese
                 )
             }
+        }
+    }
+
+    private func toggle(_ block: Block) {
+        if expandedBlockIDs.contains(block.persistentModelID) {
+            expandedBlockIDs.remove(block.persistentModelID)
+        } else {
+            expandedBlockIDs.insert(block.persistentModelID)
         }
     }
 
