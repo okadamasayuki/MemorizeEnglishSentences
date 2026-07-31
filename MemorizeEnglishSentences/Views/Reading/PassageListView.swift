@@ -60,7 +60,7 @@ struct PassageListView: View {
                                 Button(role: .destructive) {
                                     delete(block)
                                 } label: {
-                                    Label("削除", systemImage: "trash")
+                                    Image(systemName: "trash")
                                 }
                             }
                         }
