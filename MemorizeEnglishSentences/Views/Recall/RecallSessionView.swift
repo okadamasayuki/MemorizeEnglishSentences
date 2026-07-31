@@ -104,8 +104,17 @@ struct RecallSessionView: View {
                 .buttonStyle(.plain)
             }
         }
-        .sheet(isPresented: $showRenameAlert) {
-            renameSheet
+        // タイトルは空白 1 文字にして、見出しなしで上部の余白だけ確保する
+        .alert(" ", isPresented: $showRenameAlert) {
+            TextField("タイトル", text: $editingTitle)
+            Button("保存") {
+                let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    passage.title = trimmed
+                    try? context.save()
+                }
+            }
+            Button("キャンセル", role: .cancel) {}
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -129,37 +138,6 @@ struct RecallSessionView: View {
             speech.stop()
             try? context.save()
         }
-    }
-
-    /// タイトル編集シート(見出しなし・入力欄とボタンだけ)
-    private var renameSheet: some View {
-        VStack(spacing: 16) {
-            TextField("タイトル", text: $editingTitle)
-                .textFieldStyle(.roundedBorder)
-
-            HStack(spacing: 12) {
-                Button("キャンセル", role: .cancel) {
-                    showRenameAlert = false
-                }
-                .buttonStyle(.bordered)
-                .frame(maxWidth: .infinity)
-
-                Button("保存") {
-                    let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty {
-                        passage.title = trimmed
-                        try? context.save()
-                    }
-                    showRenameAlert = false
-                }
-                .buttonStyle(.borderedProminent)
-                .frame(maxWidth: .infinity)
-                .disabled(editingTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding()
-        .presentationDetents([.height(140)])
-        .presentationDragIndicator(.visible)
     }
 
     private var statusBinding: Binding<MemorizationStatus> {
