@@ -71,6 +71,8 @@ struct BlockCardView: View {
                         Image(systemName: isSpeakingThisBlock ? "stop.circle.fill" : "speaker.wave.2.fill")
                             .font(.subheadline)
                             .foregroundStyle(isSpeakingThisBlock ? Color.red : Color.accentColor)
+                            // アイコンが変わっても本文の折り返しが動かないよう枠を固定
+                            .frame(width: 24, height: 24)
                     }
                     .buttonStyle(.borderless)
 
@@ -78,6 +80,7 @@ struct BlockCardView: View {
                         Image(systemName: "bookmark.fill")
                             .font(.subheadline)
                             .foregroundStyle(.orange)
+                            .frame(width: 24, height: 24)
                     }
                 }
             }
