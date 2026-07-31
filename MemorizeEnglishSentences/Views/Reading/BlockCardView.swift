@@ -9,6 +9,8 @@ struct BlockCardView: View {
     let isExpanded: Bool
     let onToggle: () -> Void
     let onWordTap: (String) -> Void
+    /// 英文チェックで不自然と判定された語(オレンジで表示)
+    var suspiciousWords: Set<String> = []
 
     private var tokens: [WordToken] {
         WordTokenizer.tokenize(block.englishText)
@@ -43,6 +45,7 @@ struct BlockCardView: View {
                     ForEach(tokens) { token in
                         Text(token.display)
                             .font(.body)
+                            .foregroundStyle(isSuspicious(token) ? Color.orange : Color.primary)
                             // 読み上げ中の単語は太い下線(オーバーレイなのでレイアウトは動かない)
                             .overlay(alignment: .bottom) {
                                 if isSpokenToken(token.id) {
@@ -97,12 +100,20 @@ struct BlockCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.secondarySystemBackground))
+                // チェックで不自然な語があるカードはうっすらオレンジ
+                .fill(suspiciousWords.isEmpty ? Color(.secondarySystemBackground) : Color.orange.opacity(0.13))
         )
         .contentShape(RoundedRectangle(cornerRadius: 12))
         .onTapGesture {
             onToggle()
         }
+    }
+
+    /// 英文チェックで不自然と判定された語か
+    private func isSuspicious(_ token: WordToken) -> Bool {
+        guard !suspiciousWords.isEmpty else { return false }
+        let word = token.normalized.isEmpty ? token.display.lowercased() : token.normalized
+        return suspiciousWords.contains(word)
     }
 
     /// いま読み上げている単語かどうか

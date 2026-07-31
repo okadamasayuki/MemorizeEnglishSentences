@@ -21,6 +21,8 @@ struct PassageListView: View {
     @State private var isSelecting = false
     @State private var selection = Set<PersistentIdentifier>()
     @State private var scrollProxy: ScrollViewProxy?
+    /// 英文チェックの結果(nil = 未実施)。ブロックごとの不自然な語の集合
+    @State private var suspiciousByBlock: [PersistentIdentifier: Set<String>]?
 
     private var blocks: [Block] {
         passages.flatMap { $0.orderedBlocks }
@@ -97,6 +99,17 @@ struct PassageListView: View {
                                 Image(systemName: "bookmark.fill")
                                     .foregroundStyle(.orange)
                             }
+                        }
+                    }
+                }
+                // 英文が間違っていないかのチェック(結果に応じて色が変わる)
+                if !blocks.isEmpty, !isSelecting {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            toggleSentenceCheck()
+                        } label: {
+                            Image(systemName: "text.badge.checkmark")
+                                .foregroundStyle(checkButtonColor)
                         }
                     }
                 }
@@ -192,7 +205,8 @@ struct PassageListView: View {
                 onToggle: { toggle(block) },
                 onWordTap: { word in
                     showWord(word)
-                }
+                },
+                suspiciousWords: suspiciousByBlock?[block.persistentModelID] ?? []
             )
             .allowsHitTesting(!isSelecting)
 
@@ -213,6 +227,28 @@ struct PassageListView: View {
                     }
             }
         }
+    }
+
+    /// チェックボタンの色: 未実施=通常色 / 問題あり=オレンジ / 問題なし=緑
+    private var checkButtonColor: Color {
+        guard let checked = suspiciousByBlock else { return .accentColor }
+        return checked.isEmpty ? .green : .orange
+    }
+
+    /// 英文チェックの実行/解除。不自然な語をオレンジ表示する
+    private func toggleSentenceCheck() {
+        if suspiciousByBlock != nil {
+            withAnimation { suspiciousByBlock = nil }
+            return
+        }
+        var result: [PersistentIdentifier: Set<String>] = [:]
+        for block in blocks {
+            let words = SentenceValidator.misspelledWords(in: block.englishText)
+            if !words.isEmpty {
+                result[block.persistentModelID] = Set(words.map { $0.lowercased() })
+            }
+        }
+        withAnimation { suspiciousByBlock = result }
     }
 
     /// 単語の意味を表示: 内蔵辞書 → キャッシュ → Apple 翻訳の順で解決
