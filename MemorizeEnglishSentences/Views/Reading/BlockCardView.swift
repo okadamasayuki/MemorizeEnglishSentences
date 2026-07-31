@@ -43,7 +43,8 @@ struct BlockCardView: View {
                     ForEach(tokens) { token in
                         Text(token.display)
                             .font(.body)
-                            .fontWeight(isSpokenToken(token.id) ? .bold : .regular)
+                            // 読み上げ中の単語は下線(太字だと文字幅が変わり折り返しが動くため)
+                            .underline(isSpokenToken(token.id), color: .accentColor)
                             .onTapGesture {
                                 let word = token.normalized.isEmpty ? token.display : token.normalized
                                 onWordTap(word)
