@@ -1,15 +1,30 @@
 import Foundation
 import NaturalLanguage
 
-/// 入力テキストを 1 文 = 1 ブロックに分割する
+/// 入力テキストをブロックに分割する。
+/// 改行で区切られた段落が複数あるとき(写真 OCR や段落貼り付け)は 1 段落 = 1 ブロック、
+/// 段落がひとつだけのとき(音声入力など)は 1 文 = 1 ブロック。
 enum TextSplitter {
     static func split(_ text: String) -> [String] {
-        // 空行があれば先に段落分割
         let paragraphs = text
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
 
+        if paragraphs.count >= 2 {
+            // 段落単位でブロック化。短い断片(見出しの読み取り残りなど)は前の段落へ結合
+            var merged: [String] = []
+            for paragraph in paragraphs {
+                if wordCount(paragraph) < 3, !merged.isEmpty {
+                    merged[merged.count - 1] += " " + paragraph
+                } else {
+                    merged.append(paragraph)
+                }
+            }
+            return merged
+        }
+
+        // 段落がひとつだけなら従来どおり文単位に分割
         var sentences: [String] = []
         for paragraph in paragraphs {
             sentences.append(contentsOf: splitSentences(paragraph))
