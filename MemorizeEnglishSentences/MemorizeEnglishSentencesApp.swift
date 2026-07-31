@@ -6,6 +6,7 @@ struct MemorizeEnglishSentencesApp: App {
     var body: some Scene {
         WindowGroup {
             RootTabView()
+                .preferredColorScheme(.light) // 常に白ベースのライト外観で表示
         }
         .modelContainer(for: [
             Passage.self,
