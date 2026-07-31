@@ -9,6 +9,12 @@ struct RecallListView: View {
     ) private var passages: [Passage]
     @State private var showingAdd = false
     @State private var path: [Passage] = []
+    /// 覚えた!を一覧から隠す(アプリを閉じても記憶する)
+    @AppStorage("hideMemorized") private var hideMemorized = false
+
+    private var visiblePassages: [Passage] {
+        hideMemorized ? passages.filter { $0.memorizationStatus != .memorized } : passages
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -21,7 +27,7 @@ struct RecallListView: View {
                     )
                 } else {
                     List {
-                        ForEach(passages) { passage in
+                        ForEach(visiblePassages) { passage in
                             HStack(spacing: 8) {
                                 statusBadge(passage.memorizationStatus)
                                 Text(rowText(for: passage))
@@ -60,6 +66,17 @@ struct RecallListView: View {
                         Image(systemName: "plus")
                     }
                 }
+                // 覚えた!の表示/非表示(緑=表示中、グレー=非表示中)
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            hideMemorized.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundStyle(hideMemorized ? Color(.systemGray3) : Color.green)
+                    }
+                }
             }
             .sheet(isPresented: $showingAdd) {
                 AddPassageView(purpose: .recall)
@@ -79,7 +96,7 @@ struct RecallListView: View {
 
     private func delete(at offsets: IndexSet) {
         for offset in offsets {
-            context.delete(passages[offset])
+            context.delete(visiblePassages[offset])
         }
         try? context.save()
     }
