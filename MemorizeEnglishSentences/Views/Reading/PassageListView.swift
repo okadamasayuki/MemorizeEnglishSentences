@@ -4,7 +4,10 @@ import SwiftUI
 /// 音読タブ。一覧を挟まず、いきなり読む画面(ReadingView)を表示する。
 /// 文章の切り替えは左上のメニューから。
 struct PassageListView: View {
-    @Query(sort: \Passage.createdAt, order: .reverse) private var passages: [Passage]
+    @Query(
+        filter: #Predicate<Passage> { $0.purposeRaw == "reading" },
+        sort: \Passage.createdAt, order: .reverse
+    ) private var passages: [Passage]
     @State private var showingAdd = false
     @State private var selected: Passage?
 
@@ -60,7 +63,7 @@ struct PassageListView: View {
                 // 新しく追加した文章をすぐ表示する
                 selected = nil
             }) {
-                AddPassageView()
+                AddPassageView(purpose: .reading)
             }
         }
     }

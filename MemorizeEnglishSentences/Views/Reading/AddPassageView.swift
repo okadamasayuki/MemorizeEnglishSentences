@@ -4,6 +4,8 @@ import SwiftUI
 /// 英文の登録シート(3 ステップ: ① 音声入力/写真/編集 → ② 文分割プレビュー → ③ 翻訳して保存)
 struct AddPassageView: View {
     @Environment(\.dismiss) private var dismiss
+    /// どちらのタブ用の文章として保存するか(音読と暗記は独立)
+    let purpose: PassagePurpose
 
     private enum Step {
         case input
@@ -31,7 +33,7 @@ struct AddPassageView: View {
                 case .preview:
                     previewStep
                 case .translate:
-                    TranslateAndSaveView(title: resolvedTitle, sentences: sentences) {
+                    TranslateAndSaveView(title: resolvedTitle, sentences: sentences, purpose: purpose) {
                         dismiss()
                     }
                 }

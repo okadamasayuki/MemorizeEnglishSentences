@@ -1,6 +1,12 @@
 import Foundation
 import SwiftData
 
+/// 文章がどちらのタブに属するか(音読と暗記は独立したデータ)
+enum PassagePurpose: String, Codable {
+    case reading
+    case recall
+}
+
 /// 暗記の習熟ステータス
 enum MemorizationStatus: String, Codable, CaseIterable, Identifiable {
     case needsReview
@@ -24,6 +30,8 @@ final class Passage {
     var createdAt: Date
     /// MemorizationStatus の rawValue(既定は「普通」)
     var memorizationStatusRaw: String = MemorizationStatus.normal.rawValue
+    /// PassagePurpose の rawValue(既存データは既定で音読)
+    var purposeRaw: String = PassagePurpose.reading.rawValue
 
     @Relationship(deleteRule: .cascade, inverse: \Block.passage)
     var blocks: [Block] = []
@@ -56,6 +64,11 @@ final class Passage {
     var memorizationStatus: MemorizationStatus {
         get { MemorizationStatus(rawValue: memorizationStatusRaw) ?? .normal }
         set { memorizationStatusRaw = newValue.rawValue }
+    }
+
+    var purpose: PassagePurpose {
+        get { PassagePurpose(rawValue: purposeRaw) ?? .reading }
+        set { purposeRaw = newValue.rawValue }
     }
 }
 

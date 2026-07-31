@@ -8,6 +8,7 @@ struct TranslateAndSaveView: View {
 
     let title: String
     let sentences: [String]
+    let purpose: PassagePurpose
     let onDone: () -> Void
 
     @State private var configuration: TranslationSession.Configuration?
@@ -123,6 +124,7 @@ struct TranslateAndSaveView: View {
 
     private func save(withTranslations: Bool) {
         let passage = Passage(title: title)
+        passage.purpose = purpose
         context.insert(passage)
         for (index, sentence) in sentences.enumerated() {
             let block = Block(

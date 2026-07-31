@@ -3,7 +3,10 @@ import SwiftUI
 
 struct RecallListView: View {
     @Environment(\.modelContext) private var context
-    @Query(sort: \Passage.createdAt, order: .reverse) private var passages: [Passage]
+    @Query(
+        filter: #Predicate<Passage> { $0.purposeRaw == "recall" },
+        sort: \Passage.createdAt, order: .reverse
+    ) private var passages: [Passage]
     @State private var showingAdd = false
 
     var body: some View {
@@ -13,7 +16,7 @@ struct RecallListView: View {
                     ContentUnavailableView(
                         "英文がまだありません",
                         systemImage: "brain",
-                        description: Text("音読タブで英文を登録すると、ここで暗記練習ができます。")
+                        description: Text("右上の + から暗記したい英文を登録しましょう。")
                     )
                 } else {
                     List {
@@ -54,7 +57,7 @@ struct RecallListView: View {
                 }
             }
             .sheet(isPresented: $showingAdd) {
-                AddPassageView()
+                AddPassageView(purpose: .recall)
             }
         }
     }

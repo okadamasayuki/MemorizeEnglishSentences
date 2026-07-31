@@ -84,6 +84,38 @@ enum SampleData {
         UserDefaults.standard.set(true, forKey: key)
     }
 
+    /// 音読と暗記のデータを独立させたときの一度きりの移行処理。
+    /// それまで両タブで共有していた文章を暗記側にも複製し、暗記の記録は暗記側へ移す。
+    static func splitReadingAndRecallIfNeeded(context: ModelContext) {
+        let key = "didSplitReadingRecallData"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+
+        let descriptor = FetchDescriptor<Passage>()
+        if let passages = try? context.fetch(descriptor) {
+            for passage in passages where passage.purpose == .reading {
+                let copy = Passage(title: passage.title, createdAt: passage.createdAt)
+                copy.purpose = .recall
+                copy.memorizationStatus = passage.memorizationStatus
+                context.insert(copy)
+                for block in passage.orderedBlocks {
+                    let blockCopy = Block(
+                        index: block.index,
+                        englishText: block.englishText,
+                        japaneseText: block.japaneseText
+                    )
+                    blockCopy.passage = copy
+                    context.insert(blockCopy)
+                }
+                // 暗記の挑戦記録は暗記側の文章に付け替える
+                for attempt in passage.attempts {
+                    attempt.passage = copy
+                }
+            }
+            try? context.save()
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     static func seedIfNeeded(context: ModelContext) {
         guard !UserDefaults.standard.bool(forKey: seededKey) else { return }
 

@@ -19,6 +19,7 @@ struct RootTabView: View {
         .task {
             SampleData.seedIfNeeded(context: context)
             SampleData.applyDefaultStatusIfNeeded(context: context)
+            SampleData.splitReadingAndRecallIfNeeded(context: context)
             StudyTimeTracker.shared.sessionStarted()
         }
         // アプリを使っている間だけ勉強時間を計測する
