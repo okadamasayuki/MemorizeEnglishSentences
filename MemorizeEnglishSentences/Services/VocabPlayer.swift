@@ -44,11 +44,14 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         speedIndex = (speedIndex + 1) % 3
     }
 
-    func play(_ words: [VocabWord]) {
+    /// 連続再生を開始する。from を指定するとその単語から始める
+    func play(_ words: [VocabWord], from start: VocabWord? = nil) {
         stop()
         guard !words.isEmpty else { return }
         queue = words.map { ($0.persistentModelID, $0.english, $0.japanese) }
-        index = 0
+        index = start.flatMap { started in
+            queue.firstIndex { $0.id == started.persistentModelID }
+        } ?? 0
         phase = 0
         isPlaying = true
         speakCurrent()

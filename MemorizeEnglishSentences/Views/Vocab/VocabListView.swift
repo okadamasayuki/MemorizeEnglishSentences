@@ -111,5 +111,9 @@ struct VocabListView: View {
                 }
             }
         }
+        // 長押しでこの単語から連続再生を開始
+        .onLongPressGesture {
+            player.play(words, from: word)
+        }
     }
 }
