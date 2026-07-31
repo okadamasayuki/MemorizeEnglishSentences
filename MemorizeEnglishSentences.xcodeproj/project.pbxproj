@@ -86,7 +86,7 @@
 				};
 			};
 			buildConfigurationList = 1A000000000000000000000A /* Build configuration list for PBXProject "MemorizeEnglishSentences" */;
-			developmentRegion = en;
+			developmentRegion = ja;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
