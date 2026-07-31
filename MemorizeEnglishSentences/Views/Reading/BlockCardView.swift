@@ -77,22 +77,21 @@ struct BlockCardView: View {
 
     // MARK: - 構文解析(その場で表示)
 
+    /// 文字サイズは通常のまま、単語を役割の色で囲うだけの構文表示
     private func syntaxView(_ analysis: SyntaxAnalysis) -> some View {
-        FlowLayout(spacing: 6, lineSpacing: 10) {
+        FlowLayout(spacing: 4, lineSpacing: 6) {
             ForEach(Array(analysis.elements.enumerated()), id: \.offset) { _, element in
-                VStack(spacing: 2) {
-                    Text(element.text)
-                        .font(.body.bold())
-                    Text(element.role)
-                        .font(.caption.bold())
+                let words = element.text.split(whereSeparator: { $0.isWhitespace })
+                ForEach(Array(words.enumerated()), id: \.offset) { _, word in
+                    Text(String(word))
+                        .font(.body)
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 1)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(roleColor(element.role).opacity(0.22))
+                        )
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(roleColor(element.role).opacity(0.18))
-                )
-                .foregroundStyle(roleColor(element.role))
             }
         }
     }
