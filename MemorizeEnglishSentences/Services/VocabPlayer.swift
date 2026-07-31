@@ -14,8 +14,11 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
 
     // Siri ボイスと英語ボイスを同じエンジンで交互に使うと英語の音質が
     // 劣化することがあるため、言語ごとにエンジンを分ける
-    private let englishSynthesizer = AVSpeechSynthesizer()
-    private let japaneseSynthesizer = AVSpeechSynthesizer()
+    private var englishSynthesizer = AVSpeechSynthesizer()
+    private var japaneseSynthesizer = AVSpeechSynthesizer()
+    /// 長時間の連続再生でエンジンの音質が徐々に劣化する現象への対策として、
+    /// 一定数の単語ごとにエンジンを作り直す
+    private var wordsSinceRefresh = 0
     private var queue: [(id: PersistentIdentifier, english: String, japanese: String)] = []
     private var index = 0
     /// 現在の単語の読み上げ手順(true = 英語, false = 和訳)と進行位置
@@ -150,9 +153,21 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
                 stop()
                 return
             }
+            refreshSynthesizersIfNeeded()
             beginWord()
         }
         speakCurrent()
+    }
+
+    /// 30 単語ごとに読み上げエンジンを作り直して音質の劣化を防ぐ
+    private func refreshSynthesizersIfNeeded() {
+        wordsSinceRefresh += 1
+        guard wordsSinceRefresh >= 30 else { return }
+        wordsSinceRefresh = 0
+        englishSynthesizer = AVSpeechSynthesizer()
+        englishSynthesizer.delegate = self
+        japaneseSynthesizer = AVSpeechSynthesizer()
+        japaneseSynthesizer.delegate = self
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
