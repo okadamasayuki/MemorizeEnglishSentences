@@ -41,9 +41,6 @@ struct RecallSessionView: View {
                     }
 
                     if !speech.fullText.isEmpty || speech.isRecording {
-                        Text("認識中のテキスト")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                         Text(speech.fullText.isEmpty ? "..." : speech.fullText)
                             .font(.body)
                             .foregroundStyle(speech.isRecording ? .primary : .secondary)
