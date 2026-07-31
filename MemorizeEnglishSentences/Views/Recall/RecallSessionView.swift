@@ -36,7 +36,6 @@ struct RecallSessionView: View {
                     if showAnswer {
                         Text(referenceText)
                             .font(.body)
-                            .foregroundStyle(.blue)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
