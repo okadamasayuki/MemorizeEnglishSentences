@@ -20,13 +20,14 @@ struct RecallSessionView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // 習熟ステータス
-                    Picker("習熟度", selection: statusBinding) {
+                    // 習熟ステータス(アイコンで選択)
+                    HStack(spacing: 44) {
+                        Spacer()
                         ForEach(MemorizationStatus.allCases) { status in
-                            Text(status.labelJa).tag(status)
+                            statusButton(for: status)
                         }
+                        Spacer()
                     }
-                    .pickerStyle(.segmented)
 
                     Divider()
 
@@ -87,6 +88,9 @@ struct RecallSessionView: View {
             }
             .padding()
         }
+        // ステータスに合わせて背景色をうっすら変える
+        .background(passage.memorizationStatus.color.opacity(0.06).ignoresSafeArea())
+        .animation(.easeInOut(duration: 0.25), value: passage.memorizationStatus)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -112,14 +116,19 @@ struct RecallSessionView: View {
         }
     }
 
-    private var statusBinding: Binding<MemorizationStatus> {
-        Binding(
-            get: { passage.memorizationStatus },
-            set: { newValue in
-                passage.memorizationStatus = newValue
-                try? context.save()
-            }
-        )
+    private func statusButton(for status: MemorizationStatus) -> some View {
+        let isSelected = passage.memorizationStatus == status
+        return Button {
+            passage.memorizationStatus = status
+            try? context.save()
+        } label: {
+            Image(systemName: status.iconName)
+                .font(.system(size: 26))
+                .foregroundStyle(isSelected ? status.color : Color(.systemGray3))
+                .scaleEffect(isSelected ? 1.15 : 1.0)
+        }
+        .buttonStyle(.borderless)
+        .animation(.easeInOut(duration: 0.15), value: isSelected)
     }
 
     private var currentAnswer: String {

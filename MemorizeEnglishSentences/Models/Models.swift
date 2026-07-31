@@ -22,6 +22,14 @@ enum MemorizationStatus: String, Codable, CaseIterable, Identifiable {
         case .memorized: "覚えた!"
         }
     }
+
+    var iconName: String {
+        switch self {
+        case .needsReview: "exclamationmark.triangle.fill"
+        case .normal: "minus.circle.fill"
+        case .memorized: "checkmark.seal.fill"
+        }
+    }
 }
 
 @Model
