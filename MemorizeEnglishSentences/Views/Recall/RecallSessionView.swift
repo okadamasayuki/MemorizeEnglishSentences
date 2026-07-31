@@ -61,19 +61,19 @@ struct RecallSessionView: View {
                 }
                 .padding()
             }
+            // 余白をタップすると答えを表示/非表示
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    showAnswer.toggle()
+                }
+            }
 
             Divider()
 
             VStack(spacing: 10) {
                 HStack(spacing: 12) {
                     DictationButton(speech: speech, label: "音声で回答")
-
-                    Button {
-                        showAnswer.toggle()
-                    } label: {
-                        Label(showAnswer ? "答えを隠す" : "答えを見る", systemImage: "eye")
-                    }
-                    .buttonStyle(.bordered)
                 }
 
                 Button {
