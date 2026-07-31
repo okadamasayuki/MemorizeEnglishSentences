@@ -95,15 +95,24 @@ struct RecallSessionView: View {
             }
             .padding()
         }
-        .navigationTitle(passage.title)
         .navigationBarTitleDisplayMode(.inline)
-        // ナビゲーションバーのタイトルをタップ → 「タイトルを編集」
-        .toolbarTitleMenu {
-            Button {
-                editingTitle = passage.title
-                showRenameAlert = true
-            } label: {
-                Label("タイトルを編集", systemImage: "pencil")
+        .toolbar {
+            // タイトルをタップするとすぐ編集ダイアログが開く
+            ToolbarItem(placement: .principal) {
+                Button {
+                    editingTitle = passage.title
+                    showRenameAlert = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(passage.title)
+                            .font(.headline)
+                            .lineLimit(1)
+                        Image(systemName: "pencil")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
             }
         }
         .alert("タイトルを編集", isPresented: $showRenameAlert) {
