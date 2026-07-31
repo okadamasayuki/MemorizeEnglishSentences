@@ -3,6 +3,7 @@ import SwiftUI
 
 struct RecallListView: View {
     @Query(sort: \Passage.createdAt, order: .reverse) private var passages: [Passage]
+    @State private var showingAdd = false
 
     var body: some View {
         NavigationStack {
@@ -39,6 +40,18 @@ struct RecallListView: View {
             .navigationTitle("暗記")
             .navigationDestination(for: Passage.self) { passage in
                 RecallSessionView(passage: passage)
+            }
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingAdd = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingAdd) {
+                AddPassageView()
             }
         }
     }
