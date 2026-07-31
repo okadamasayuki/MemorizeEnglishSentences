@@ -7,11 +7,6 @@ private struct SelectedWord: Identifiable {
     let word: String
 }
 
-private struct SelectedSentence: Identifiable {
-    let id = UUID()
-    let sentence: String
-}
-
 /// 音読タブ。文章の分類はせず、登録したすべての英文ブロックを 1 画面に連続表示する。
 struct PassageListView: View {
     @Environment(\.modelContext) private var context
@@ -23,7 +18,6 @@ struct PassageListView: View {
     @State private var showingAdd = false
     @State private var expandedBlockIDs: Set<PersistentIdentifier> = []
     @State private var selectedWord: SelectedWord?
-    @State private var selectedSentence: SelectedSentence?
     @State private var retryConfiguration: TranslationSession.Configuration?
     @State private var isSelecting = false
     @State private var selection = Set<PersistentIdentifier>()
@@ -103,9 +97,6 @@ struct PassageListView: View {
             .sheet(item: $selectedWord) { selected in
                 WordPopupView(word: selected.word)
             }
-            .sheet(item: $selectedSentence) { selected in
-                SyntaxAnalysisView(sentence: selected.sentence)
-            }
             // 未翻訳ブロックは表示時に再翻訳を試みる
             .translationTask(retryConfiguration) { session in
                 await retryTranslations(with: session)
@@ -127,9 +118,6 @@ struct PassageListView: View {
                 onToggle: { toggle(block) },
                 onWordTap: { word in
                     selectedWord = SelectedWord(word: word)
-                },
-                onLongPress: {
-                    selectedSentence = SelectedSentence(sentence: block.englishText)
                 }
             )
             .allowsHitTesting(!isSelecting)
