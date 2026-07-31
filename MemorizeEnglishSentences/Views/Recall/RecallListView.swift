@@ -21,17 +21,31 @@ struct RecallListView: View {
                 } else {
                     List {
                         ForEach(passages) { passage in
-                            NavigationLink(value: passage) {
-                                HStack(spacing: 8) {
-                                    statusBadge(passage.memorizationStatus)
-                                    Text(rowText(for: passage))
-                                        .font(.headline)
-                                        .lineLimit(1)
-                                }
+                            HStack(spacing: 8) {
+                                statusBadge(passage.memorizationStatus)
+                                Text(rowText(for: passage))
+                                    .font(.body)
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
                             }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color(.secondarySystemBackground))
+                            )
+                            // 見えない NavigationLink でシェブロンなしのカード遷移にする
+                            .background(
+                                NavigationLink(value: passage) { EmptyView() }
+                                    .opacity(0)
+                            )
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                         }
                         .onDelete(perform: delete)
                     }
+                    .listStyle(.plain)
                 }
             }
             .navigationDestination(for: Passage.self) { passage in
