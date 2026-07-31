@@ -23,7 +23,7 @@ struct RecallListView: View {
                         ForEach(passages) { passage in
                             NavigationLink(value: passage) {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(passage.title)
+                                    Text(rowText(for: passage))
                                         .font(.headline)
                                         .lineLimit(1)
                                     HStack(spacing: 8) {
@@ -60,6 +60,12 @@ struct RecallListView: View {
                 AddPassageView(purpose: .recall)
             }
         }
+    }
+
+    /// 一覧には日本語訳の先頭部分を表示する(和訳がなければタイトル)
+    private func rowText(for passage: Passage) -> String {
+        let japanese = passage.japaneseFullText.replacingOccurrences(of: "\n", with: " ")
+        return japanese.isEmpty ? passage.title : japanese
     }
 
     private func delete(at offsets: IndexSet) {
