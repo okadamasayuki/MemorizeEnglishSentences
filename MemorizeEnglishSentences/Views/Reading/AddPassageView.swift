@@ -52,6 +52,16 @@ struct AddPassageView: View {
                         Image(systemName: "xmark")
                     }
                 }
+                // 前のステップへ戻る
+                if step != .input {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            step = (step == .translate) ? .preview : .input
+                        } label: {
+                            Image(systemName: "chevron.backward")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     switch step {
                     case .input:
