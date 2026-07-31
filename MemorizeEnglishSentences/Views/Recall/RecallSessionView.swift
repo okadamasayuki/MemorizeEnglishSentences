@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 /// タイトルを見て英文全文を音声で回答、または「答えを見る」。
-/// タイトルはタップで編集でき、習熟ステータス(要復習/普通/覚えた!)を登録できる。
+/// タイトルはタップで編集でき、習熟ステータス(要復習/どちらでもない/覚えた!)を登録できる。
 struct RecallSessionView: View {
     @Environment(\.modelContext) private var context
     @Bindable var passage: Passage

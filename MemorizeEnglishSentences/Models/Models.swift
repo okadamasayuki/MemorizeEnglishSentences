@@ -18,7 +18,7 @@ enum MemorizationStatus: String, Codable, CaseIterable, Identifiable {
     var labelJa: String {
         switch self {
         case .needsReview: "要復習"
-        case .normal: "普通"
+        case .normal: "どちらでもない"
         case .memorized: "覚えた!"
         }
     }
@@ -36,7 +36,7 @@ enum MemorizationStatus: String, Codable, CaseIterable, Identifiable {
 final class Passage {
     var title: String
     var createdAt: Date
-    /// MemorizationStatus の rawValue(既定は「普通」)
+    /// MemorizationStatus の rawValue(既定は「どちらでもない」)
     var memorizationStatusRaw: String = MemorizationStatus.normal.rawValue
     /// PassagePurpose の rawValue(既存データは既定で音読)
     var purposeRaw: String = PassagePurpose.reading.rawValue
