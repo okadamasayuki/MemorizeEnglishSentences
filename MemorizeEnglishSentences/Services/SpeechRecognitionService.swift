@@ -48,6 +48,17 @@ final class SpeechRecognitionService {
         errorMessage = nil
     }
 
+    /// 言い直し用: 認識済みテキストを消して、録音中なら認識をクリーンに再開する。
+    /// (表示だけ消しても認識器内部に前の発話が残るため、タスクごと作り直す)
+    func restartClean() {
+        confirmedText = ""
+        partialText = ""
+        errorMessage = nil
+        if isRecording {
+            restartRecognition()
+        }
+    }
+
     func start() async {
         errorMessage = nil
         guard await requestPermissions() else {

@@ -66,6 +66,16 @@ struct RecallSessionView: View {
                 Spacer()
                 // 音声で回答
                 DictationButton(speech: speech, iconOnly: true)
+                // 言い直し(認識テキストを消して最初から)
+                Button {
+                    speech.restartClean()
+                } label: {
+                    Image(systemName: "arrow.counterclockwise.circle.fill")
+                        .font(.system(size: 38))
+                        .foregroundStyle(speech.fullText.isEmpty ? Color(.systemGray3) : Color.orange)
+                }
+                .buttonStyle(.borderless)
+                .disabled(speech.fullText.isEmpty)
                 // 回答を確定して採点
                 Button {
                     confirmAnswer()
