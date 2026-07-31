@@ -43,12 +43,17 @@ final class SpeechSynthesisService: NSObject, ObservableObject, AVSpeechSynthesi
 
     private func startUtterance(_ text: String, slow: Bool) {
         let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .spokenAudio, options: [])
+        // 録音(音声回答)中は playAndRecord のまま触らない。
+        // 録音中にカテゴリを playback に切り替えると失敗して無音になる。
+        if session.category != .playAndRecord {
+            try? session.setCategory(.playback, mode: .spokenAudio, options: [])
+        }
         try? session.setActive(true, options: [])
 
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
         utterance.rate = slow ? 0.3 : AVSpeechUtteranceDefaultSpeechRate
+        utterance.volume = 1.0
         synthesizer.speak(utterance)
     }
 
