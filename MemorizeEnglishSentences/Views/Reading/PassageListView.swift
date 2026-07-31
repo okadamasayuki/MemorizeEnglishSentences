@@ -18,6 +18,10 @@ struct PassageListView: View {
     @State private var showingAdd = false
     @State private var expandedBlockIDs: Set<PersistentIdentifier> = []
     @State private var selectedWord: SelectedWord?
+    @State private var wordJapanese: String?
+    @State private var wordFailed = false
+    @State private var pendingWord: String?
+    @State private var wordConfiguration: TranslationSession.Configuration?
     @State private var retryConfiguration: TranslationSession.Configuration?
     @State private var isSelecting = false
     @State private var selection = Set<PersistentIdentifier>()
@@ -124,7 +128,18 @@ struct PassageListView: View {
                 AddPassageView(purpose: .reading)
             }
             .sheet(item: $selectedWord) { selected in
-                WordPopupView(word: selected.word)
+                WordPopupView(word: selected.word, japanese: wordJapanese, failed: wordFailed)
+            }
+            // 単語の翻訳(シート内で translationTask を使うとクラッシュするため親側で実行)
+            .translationTask(wordConfiguration) { session in
+                guard let target = pendingWord else { return }
+                do {
+                    let response = try await session.translate(target)
+                    wordJapanese = response.targetText
+                    saveWordCache(target, response.targetText)
+                } catch {
+                    wordFailed = true
+                }
             }
             // 未翻訳ブロックは表示時に再翻訳を試みる
             .translationTask(retryConfiguration) { session in
@@ -146,7 +161,7 @@ struct PassageListView: View {
                 isExpanded: expandedBlockIDs.contains(block.persistentModelID),
                 onToggle: { toggle(block) },
                 onWordTap: { word in
-                    selectedWord = SelectedWord(word: word)
+                    showWord(word)
                 }
             )
             .allowsHitTesting(!isSelecting)
@@ -168,6 +183,50 @@ struct PassageListView: View {
                     }
             }
         }
+    }
+
+    /// 単語の意味を表示: 内蔵辞書 → キャッシュ → Apple 翻訳の順で解決
+    private func showWord(_ word: String) {
+        wordJapanese = nil
+        wordFailed = false
+        pendingWord = nil
+        selectedWord = SelectedWord(word: word)
+
+        if let entry = BasicWordDictionary.lookup(word) {
+            wordJapanese = entry
+            return
+        }
+        let target = word
+        let descriptor = FetchDescriptor<WordCacheEntry>(
+            predicate: #Predicate { $0.word == target }
+        )
+        if let cached = try? context.fetch(descriptor).first {
+            wordJapanese = cached.japanese
+            return
+        }
+        pendingWord = word
+        if wordConfiguration == nil {
+            wordConfiguration = TranslationSession.Configuration(
+                source: TranslationAvailability.english,
+                target: TranslationAvailability.japanese
+            )
+        } else {
+            wordConfiguration?.invalidate()
+        }
+    }
+
+    private func saveWordCache(_ word: String, _ translation: String) {
+        let target = word
+        let descriptor = FetchDescriptor<WordCacheEntry>(
+            predicate: #Predicate { $0.word == target }
+        )
+        if let existing = try? context.fetch(descriptor).first {
+            existing.japanese = translation
+            existing.updatedAt = .now
+        } else {
+            context.insert(WordCacheEntry(word: target, japanese: translation))
+        }
+        try? context.save()
     }
 
     /// どこまで読んだかの目印。全体で 1 か所だけ(付け直すと移動、同じ場所なら解除)

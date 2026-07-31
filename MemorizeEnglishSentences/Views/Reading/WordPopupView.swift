@@ -1,15 +1,12 @@
-import SwiftData
 import SwiftUI
-import Translation
 
-/// 単語の意味(日本語)+発音読み上げの bottom sheet
+/// 単語の意味(日本語)+発音読み上げの bottom sheet。
+/// 翻訳処理は親ビュー側で行い、結果だけを受け取って表示する
+/// (シート内で translationTask を使うと iOS がクラッシュするため)。
 struct WordPopupView: View {
-    @Environment(\.modelContext) private var context
     let word: String
-
-    @State private var japanese: String?
-    @State private var configuration: TranslationSession.Configuration?
-    @State private var failed = false
+    let japanese: String?
+    let failed: Bool
 
     var body: some View {
         VStack(spacing: 12) {
@@ -50,52 +47,5 @@ struct WordPopupView: View {
         .padding()
         .presentationDetents([.height(220)])
         .presentationDragIndicator(.visible)
-        .task {
-            loadFromCacheOrTranslate()
-        }
-        .translationTask(configuration) { session in
-            do {
-                let response = try await session.translate(word)
-                japanese = response.targetText
-                saveCache(response.targetText)
-            } catch {
-                failed = true
-            }
-        }
-    }
-
-    /// 内蔵辞書 → キャッシュ → なければ翻訳して保存(オフライン・即時表示)
-    private func loadFromCacheOrTranslate() {
-        // 基本単語は内蔵辞書を最優先(単語単独の機械翻訳は音訳することがあるため)
-        if let entry = BasicWordDictionary.lookup(word) {
-            japanese = entry
-            return
-        }
-        let target = word
-        let descriptor = FetchDescriptor<WordCacheEntry>(
-            predicate: #Predicate { $0.word == target }
-        )
-        if let cached = try? context.fetch(descriptor).first {
-            japanese = cached.japanese
-        } else {
-            configuration = TranslationSession.Configuration(
-                source: TranslationAvailability.english,
-                target: TranslationAvailability.japanese
-            )
-        }
-    }
-
-    private func saveCache(_ translation: String) {
-        let target = word
-        let descriptor = FetchDescriptor<WordCacheEntry>(
-            predicate: #Predicate { $0.word == target }
-        )
-        if let existing = try? context.fetch(descriptor).first {
-            existing.japanese = translation
-            existing.updatedAt = .now
-        } else {
-            context.insert(WordCacheEntry(word: target, japanese: translation))
-        }
-        try? context.save()
     }
 }
