@@ -33,6 +33,15 @@ struct RecallSessionView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    Divider()
+
+                    Text("日本語訳")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(passage.japaneseFullText.isEmpty ? "(和訳がありません — 音読タブで翻訳してください)" : passage.japaneseFullText)
+                        .font(.body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
                     if showAnswer {
                         Divider()
                         Text("正解英文")
