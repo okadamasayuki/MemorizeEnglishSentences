@@ -59,7 +59,6 @@ struct MistakeAnalysisView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         heatmapSection
-                        topMistakesSection
                         historySection
                     }
                     .padding()
@@ -99,45 +98,6 @@ struct MistakeAnalysisView: View {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color(.secondarySystemBackground))
             )
-        }
-    }
-
-    // MARK: - 間違えやすい箇所 TOP
-
-    private var topMistakesSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("間違えやすい箇所 TOP")
-                .font(.headline)
-
-            let top = wordStats
-                .filter { $0.missCount > 0 }
-                .sorted { ($0.missCount, $1.id) > ($1.missCount, $0.id) }
-                .prefix(10)
-
-            if top.isEmpty {
-                Text("間違えた単語はありません 🎉")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                VStack(spacing: 6) {
-                    ForEach(Array(top)) { stat in
-                        HStack {
-                            Text(stat.display)
-                                .font(.subheadline.bold())
-                            Spacer()
-                            Text("ミス \(stat.missCount) 回 / 挑戦 \(stat.totalCount) 回")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color(.secondarySystemBackground))
-                        )
-                    }
-                }
-            }
         }
     }
 
