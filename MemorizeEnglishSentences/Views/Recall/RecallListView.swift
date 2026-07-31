@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct RecallListView: View {
+    @Environment(\.modelContext) private var context
     @Query(sort: \Passage.createdAt, order: .reverse) private var passages: [Passage]
     @State private var showingAdd = false
 
@@ -15,25 +16,28 @@ struct RecallListView: View {
                         description: Text("音読タブで英文を登録すると、ここで暗記練習ができます。")
                     )
                 } else {
-                    List(passages) { passage in
-                        NavigationLink(value: passage) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(passage.title)
-                                    .font(.headline)
-                                    .lineLimit(1)
-                                HStack(spacing: 8) {
-                                    Text("\(passage.blocks.count) 文")
-                                    if let latest = passage.latestAttempt {
-                                        Text("直近正答率 \(Int(latest.accuracy * 100))%")
-                                            .foregroundStyle(accuracyColor(latest.accuracy))
-                                    } else {
-                                        Text("未挑戦")
+                    List {
+                        ForEach(passages) { passage in
+                            NavigationLink(value: passage) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(passage.title)
+                                        .font(.headline)
+                                        .lineLimit(1)
+                                    HStack(spacing: 8) {
+                                        Text("\(passage.blocks.count) 文")
+                                        if let latest = passage.latestAttempt {
+                                            Text("直近正答率 \(Int(latest.accuracy * 100))%")
+                                                .foregroundStyle(accuracyColor(latest.accuracy))
+                                        } else {
+                                            Text("未挑戦")
+                                        }
                                     }
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                                 }
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                             }
                         }
+                        .onDelete(perform: delete)
                     }
                 }
             }
@@ -54,6 +58,13 @@ struct RecallListView: View {
                 AddPassageView()
             }
         }
+    }
+
+    private func delete(at offsets: IndexSet) {
+        for offset in offsets {
+            context.delete(passages[offset])
+        }
+        try? context.save()
     }
 
     private func accuracyColor(_ accuracy: Double) -> Color {
