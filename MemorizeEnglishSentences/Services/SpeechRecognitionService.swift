@@ -22,6 +22,9 @@ final class SpeechRecognitionService {
     /// final セグメント確定ごとに呼ばれるコールバック(登録画面でエディタへ追記する用)
     var onFinalSegment: ((String) -> Void)?
 
+    /// 認識バイアス用の語句(暗記では正解英文の単語を渡して、正解に寄せて聞き取る)
+    var contextualStrings: [String] = []
+
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private let audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -97,6 +100,9 @@ final class SpeechRecognitionService {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.addsPunctuation = true
+        if !contextualStrings.isEmpty {
+            request.contextualStrings = contextualStrings
+        }
         if recognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
         }

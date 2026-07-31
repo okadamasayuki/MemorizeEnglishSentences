@@ -113,6 +113,11 @@ struct RecallSessionView: View {
         .onAppear {
             // 長文ディクテーション: final 後に自動再開してセグメント連結
             speech.autoRestart = true
+            // 正解英文の単語を認識バイアスとして渡し、正解に寄せて聞き取る
+            let words = WordTokenizer.tokenize(referenceText)
+                .map(\.normalized)
+                .filter { $0.count >= 2 }
+            speech.contextualStrings = Array(Set(words)).sorted()
         }
         .onDisappear {
             speech.stop()
