@@ -16,7 +16,6 @@ struct ReadingView: View {
     @Environment(\.modelContext) private var context
     let passage: Passage
 
-    @State private var expandedBlockIDs: Set<PersistentIdentifier> = []
     @State private var selectedWord: SelectedWord?
     @State private var selectedSentence: SelectedSentence?
     @State private var retryConfiguration: TranslationSession.Configuration?
@@ -25,18 +24,12 @@ struct ReadingView: View {
         passage.orderedBlocks
     }
 
-    private var allExpanded: Bool {
-        !blocks.isEmpty && expandedBlockIDs.count == blocks.count
-    }
-
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 ForEach(blocks) { block in
                     BlockCardView(
                         block: block,
-                        isExpanded: expandedBlockIDs.contains(block.persistentModelID),
-                        onToggle: { toggle(block) },
                         onWordTap: { word in
                             selectedWord = SelectedWord(word: word)
                         },
@@ -50,17 +43,6 @@ struct ReadingView: View {
         }
         .navigationTitle(passage.title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(allExpanded ? "すべて隠す" : "すべて表示") {
-                    if allExpanded {
-                        expandedBlockIDs.removeAll()
-                    } else {
-                        expandedBlockIDs = Set(blocks.map(\.persistentModelID))
-                    }
-                }
-            }
-        }
         .sheet(item: $selectedWord) { selected in
             WordPopupView(word: selected.word)
         }
@@ -78,14 +60,6 @@ struct ReadingView: View {
                     target: TranslationAvailability.japanese
                 )
             }
-        }
-    }
-
-    private func toggle(_ block: Block) {
-        if expandedBlockIDs.contains(block.persistentModelID) {
-            expandedBlockIDs.remove(block.persistentModelID)
-        } else {
-            expandedBlockIDs.insert(block.persistentModelID)
         }
     }
 

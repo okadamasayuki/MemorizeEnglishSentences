@@ -1,10 +1,8 @@
 import SwiftUI
 
-/// ブロックカード。タップで展開(上に英文・下に和訳)、単語タップで意味、長押しで構文解析。
+/// ブロックカード。英文と和訳を常に表示。単語タップで意味、長押しで構文解析。
 struct BlockCardView: View {
     let block: Block
-    let isExpanded: Bool
-    let onToggle: () -> Void
     let onWordTap: (String) -> Void
     let onLongPress: () -> Void
 
@@ -14,38 +12,30 @@ struct BlockCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            FlowLayout(spacing: 4, lineSpacing: 6) {
-                ForEach(tokens) { token in
-                    Text(token.display)
-                        .font(.body)
-                        .onTapGesture {
-                            let word = token.normalized.isEmpty ? token.display : token.normalized
-                            onWordTap(word)
-                        }
+            HStack(alignment: .top, spacing: 8) {
+                FlowLayout(spacing: 4, lineSpacing: 6) {
+                    ForEach(tokens) { token in
+                        Text(token.display)
+                            .font(.body)
+                            .onTapGesture {
+                                let word = token.normalized.isEmpty ? token.display : token.normalized
+                                onWordTap(word)
+                            }
+                    }
                 }
+                Button {
+                    SpeechSynthesisService.shared.speak(block.englishText)
+                } label: {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.subheadline)
+                }
+                .buttonStyle(.borderless)
             }
 
-            if isExpanded {
-                Divider()
-                Text(block.japaneseText ?? "(未翻訳 — ネットワークまたは言語データを確認してください)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                HStack {
-                    Button {
-                        SpeechSynthesisService.shared.speak(block.englishText)
-                    } label: {
-                        Label("読み上げ", systemImage: "speaker.wave.2.fill")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    Spacer()
-                    Text("長押しで構文解析")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-            }
+            Text(block.japaneseText ?? "(未翻訳 — ネットワークまたは言語データを確認してください)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -54,9 +44,6 @@ struct BlockCardView: View {
                 .fill(Color(.secondarySystemBackground))
         )
         .contentShape(RoundedRectangle(cornerRadius: 12))
-        .onTapGesture {
-            onToggle()
-        }
         .onLongPressGesture {
             onLongPress()
         }
