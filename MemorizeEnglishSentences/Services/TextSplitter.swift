@@ -44,6 +44,11 @@ enum TextSplitter {
         return merged.flatMap { chunkIfNeeded($0) }
     }
 
+    /// テキストを文単位に分割する(構文解析でも使用)
+    static func sentences(_ text: String) -> [String] {
+        splitSentences(text)
+    }
+
     private static func splitSentences(_ text: String) -> [String] {
         let tokenizer = NLTokenizer(unit: .sentence)
         tokenizer.string = text

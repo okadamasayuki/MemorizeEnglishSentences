@@ -11,7 +11,7 @@ struct BlockCardView: View {
     let onToggle: () -> Void
     let onWordTap: (String) -> Void
 
-    @State private var analysis: SyntaxAnalysis?
+    @State private var analyses: [SyntaxAnalysis]?
     @State private var showSyntax = false
     @State private var isLoadingSyntax = false
     @State private var syntaxError: String?
@@ -22,8 +22,8 @@ struct BlockCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if showSyntax, let analysis {
-                syntaxView(analysis)
+            if showSyntax, let analyses {
+                syntaxView(analyses)
             } else {
                 FlowLayout(spacing: 4, lineSpacing: 6) {
                     ForEach(tokens) { token in
@@ -77,10 +77,11 @@ struct BlockCardView: View {
 
     // MARK: - 構文解析(その場で表示)
 
-    /// 文字サイズは通常のまま、単語を役割の色で囲うだけの構文表示
-    private func syntaxView(_ analysis: SyntaxAnalysis) -> some View {
-        FlowLayout(spacing: 4, lineSpacing: 6) {
-            ForEach(Array(analysis.elements.enumerated()), id: \.offset) { _, element in
+    /// 文字サイズは通常のまま、単語を役割の色で囲うだけの構文表示(段落内の全文を表示)
+    private func syntaxView(_ analyses: [SyntaxAnalysis]) -> some View {
+        let elements = analyses.flatMap(\.elements)
+        return FlowLayout(spacing: 4, lineSpacing: 6) {
+            ForEach(Array(elements.enumerated()), id: \.offset) { _, element in
                 let words = element.text.split(whereSeparator: { $0.isWhitespace })
                 ForEach(Array(words.enumerated()), id: \.offset) { _, word in
                     Text(String(word))
@@ -113,7 +114,7 @@ struct BlockCardView: View {
             showSyntax = false
             return
         }
-        if analysis != nil {
+        if analyses != nil {
             showSyntax = true
             return
         }
@@ -122,7 +123,13 @@ struct BlockCardView: View {
             isLoadingSyntax = true
             defer { isLoadingSyntax = false }
             do {
-                analysis = try await SyntaxAnalyzer.analyze(sentence: block.englishText, context: context)
+                // 段落ブロックは文ごとに解析して、全文を表示する
+                let sentences = TextSplitter.sentences(block.englishText)
+                var results: [SyntaxAnalysis] = []
+                for sentence in sentences {
+                    results.append(try await SyntaxAnalyzer.analyze(sentence: sentence, context: context))
+                }
+                analyses = results
                 showSyntax = true
             } catch {
                 syntaxError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
