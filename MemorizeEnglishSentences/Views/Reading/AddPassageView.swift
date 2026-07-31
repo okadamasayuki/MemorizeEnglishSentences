@@ -142,22 +142,22 @@ struct AddPassageView: View {
                     .foregroundStyle(.red)
             }
 
-            HStack(spacing: 10) {
+            HStack(spacing: 36) {
                 Spacer()
-                DictationButton(speech: speech, label: "音声")
+                DictationButton(speech: speech, iconOnly: true)
                 Button {
                     showCamera = true
                 } label: {
-                    Label("カメラ", systemImage: "camera.fill")
-                        .font(.headline)
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 30))
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderless)
                 .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
                 PhotosPicker(selection: $photoItem, matching: .images) {
-                    Label("写真", systemImage: "photo.fill")
-                        .font(.headline)
+                    Image(systemName: "photo.fill")
+                        .font(.system(size: 30))
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderless)
                 Spacer()
             }
 
