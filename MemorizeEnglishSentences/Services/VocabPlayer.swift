@@ -18,8 +18,9 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     private let japaneseSynthesizer = AVSpeechSynthesizer()
     private var queue: [(id: PersistentIdentifier, english: String, japanese: String)] = []
     private var index = 0
-    /// 0 = 英単語を読んでいる, 1 = 和訳を読んでいる
-    private var phase = 0
+    /// 現在の単語の読み上げ手順(true = 英語, false = 和訳)と進行位置
+    private var steps: [Bool] = []
+    private var stepIndex = 0
 
     private override init() {
         super.init()
@@ -60,7 +61,7 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         index = start.flatMap { started in
             queue.firstIndex { $0.id == started.persistentModelID }
         } ?? 0
-        phase = 0
+        beginWord()
         isPlaying = true
 
         // セッション設定は再生開始時の 1 回だけ(毎回設定し直すとノイズが乗る)
@@ -85,8 +86,23 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         queue = []
     }
 
+    /// 現在の単語の読み上げ手順を設定から組み立てる。
+    /// 既定は mp4 と同じ「英単語 → 和訳 → 英単語」
+    private func beginWord() {
+        let defaults = UserDefaults.standard
+        let before = (defaults.object(forKey: "vocabRepeatBefore") as? Int) ?? 1
+        let after = (defaults.object(forKey: "vocabRepeatAfter") as? Int) ?? 1
+        let item = queue[index]
+        steps = Array(repeating: true, count: max(1, before))
+        if !item.japanese.isEmpty {
+            steps.append(false)
+        }
+        steps.append(contentsOf: Array(repeating: true, count: max(0, after)))
+        stepIndex = 0
+    }
+
     private func speakCurrent() {
-        guard index < queue.count else {
+        guard index < queue.count, stepIndex < steps.count else {
             stop()
             return
         }
@@ -94,19 +110,20 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
         currentID = item.id
 
         let utterance: AVSpeechUtterance
-        if phase == 0 {
+        let isEnglish = steps[stepIndex]
+        if isEnglish {
             utterance = AVSpeechUtterance(string: item.english)
             utterance.voice = englishVoice
             utterance.rate = englishRate
-            utterance.postUtteranceDelay = 0.1
         } else {
             utterance = AVSpeechUtterance(string: Self.spokenJapanese(item.japanese))
             utterance.voice = japaneseVoice
             utterance.rate = japaneseRate
-            utterance.postUtteranceDelay = 0.25
         }
+        // 単語の最後の読み上げだけ、次の単語との間を少し空ける
+        utterance.postUtteranceDelay = stepIndex == steps.count - 1 ? 0.3 : 0.12
         utterance.volume = 1.0
-        (phase == 0 ? englishSynthesizer : japaneseSynthesizer).speak(utterance)
+        (isEnglish ? englishSynthesizer : japaneseSynthesizer).speak(utterance)
     }
 
     /// 読み上げ用に記号を取り除く。表示側はそのまま。
@@ -126,11 +143,14 @@ final class VocabPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegate
     }
 
     private func advance() {
-        if phase == 0, !queue[index].japanese.isEmpty {
-            phase = 1
-        } else {
-            phase = 0
+        stepIndex += 1
+        if stepIndex >= steps.count {
             index += 1
+            guard index < queue.count else {
+                stop()
+                return
+            }
+            beginWord()
         }
         speakCurrent()
     }

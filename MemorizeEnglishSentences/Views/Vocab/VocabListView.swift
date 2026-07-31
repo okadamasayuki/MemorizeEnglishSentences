@@ -10,6 +10,11 @@ struct VocabListView: View {
     @State private var expandedIDs: Set<PersistentIdentifier> = []
     @ObservedObject private var player = VocabPlayer.shared
 
+    // 再生パターン(英単語を和訳の前後に何回読むか)
+    @State private var showingPattern = false
+    @AppStorage("vocabRepeatBefore") private var repeatBefore = 1
+    @AppStorage("vocabRepeatAfter") private var repeatAfter = 1
+
     var body: some View {
         NavigationStack {
             Group {
@@ -50,6 +55,14 @@ struct VocabListView: View {
                 }
             }
             .toolbar {
+                // 再生パターンの設定
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingPattern = true
+                    } label: {
+                        Image(systemName: "repeat")
+                    }
+                }
                 // 再生速度(タップで 1×→2×→3× を切り替え)
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -77,6 +90,26 @@ struct VocabListView: View {
         .onDisappear {
             player.stop()
         }
+        .sheet(isPresented: $showingPattern) {
+            VStack(alignment: .leading, spacing: 20) {
+                Stepper("和訳の前に英単語 \(repeatBefore) 回", value: $repeatBefore, in: 1...5)
+                Stepper("和訳の後に英単語 \(repeatAfter) 回", value: $repeatAfter, in: 0...5)
+                Text(patternPreview)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .padding()
+            .presentationDetents([.height(220)])
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    /// 現在の再生パターンのプレビュー(例: 英語 → 和訳 → 英語)
+    private var patternPreview: String {
+        let before = Array(repeating: "英語", count: repeatBefore)
+        let after = Array(repeating: "英語", count: repeatAfter)
+        return (before + ["和訳"] + after).joined(separator: " → ")
     }
 
     private func wordRow(_ word: VocabWord) -> some View {
