@@ -147,6 +147,14 @@ struct PassageListView: View {
             }
             .onAppear {
                 startRetryTranslationIfNeeded()
+                // 単語翻訳セッションを事前に確立しておく
+                // (最初の単語タップ時にシートの裏でセッション初期化して固まるのを防ぐ)
+                if wordConfiguration == nil {
+                    wordConfiguration = TranslationSession.Configuration(
+                        source: TranslationAvailability.english,
+                        target: TranslationAvailability.japanese
+                    )
+                }
             }
         }
     }
