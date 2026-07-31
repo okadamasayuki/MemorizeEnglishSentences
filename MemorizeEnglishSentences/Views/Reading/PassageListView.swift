@@ -25,6 +25,8 @@ struct PassageListView: View {
     @State private var selectedWord: SelectedWord?
     @State private var selectedSentence: SelectedSentence?
     @State private var retryConfiguration: TranslationSession.Configuration?
+    @State private var editMode: EditMode = .inactive
+    @State private var selection = Set<PersistentIdentifier>()
 
     private var blocks: [Block] {
         passages.flatMap { $0.orderedBlocks }
@@ -40,7 +42,7 @@ struct PassageListView: View {
                         description: Text("右上の + から英文を登録しましょう。音声入力でも写真でも OK です。")
                     )
                 } else {
-                    List {
+                    List(selection: $selection) {
                         ForEach(blocks) { block in
                             BlockCardView(
                                 block: block,
@@ -53,6 +55,9 @@ struct PassageListView: View {
                                     selectedSentence = SelectedSentence(sentence: block.englishText)
                                 }
                             )
+                            // 選択モード中はカード内のタップを無効化して行選択を優先する
+                            .allowsHitTesting(!editMode.isEditing)
+                            .tag(block.persistentModelID)
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
@@ -66,14 +71,34 @@ struct PassageListView: View {
                         }
                     }
                     .listStyle(.plain)
+                    .environment(\.editMode, $editMode)
                 }
             }
             .toolbar {
+                if !blocks.isEmpty {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(editMode.isEditing ? "完了" : "選択") {
+                            withAnimation {
+                                editMode = editMode.isEditing ? .inactive : .active
+                                selection.removeAll()
+                            }
+                        }
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingAdd = true
-                    } label: {
-                        Image(systemName: "plus")
+                    if editMode.isEditing {
+                        Button(role: .destructive) {
+                            deleteSelected()
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .disabled(selection.isEmpty)
+                    } else {
+                        Button {
+                            showingAdd = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
                     }
                 }
             }
@@ -106,6 +131,29 @@ struct PassageListView: View {
             context.delete(passage)
         }
         try? context.save()
+    }
+
+    private func deleteSelected() {
+        let ids = selection
+        let targets = blocks.filter { ids.contains($0.persistentModelID) }
+        var affectedPassages: [PersistentIdentifier: Passage] = [:]
+        for block in targets {
+            if let passage = block.passage {
+                affectedPassages[passage.persistentModelID] = passage
+            }
+            context.delete(block)
+        }
+        // ブロックがなくなった文章は本体ごと削除する
+        for passage in affectedPassages.values {
+            if passage.blocks.filter({ !ids.contains($0.persistentModelID) }).isEmpty {
+                context.delete(passage)
+            }
+        }
+        try? context.save()
+        withAnimation {
+            selection.removeAll()
+            editMode = .inactive
+        }
     }
 
     private func toggle(_ block: Block) {
