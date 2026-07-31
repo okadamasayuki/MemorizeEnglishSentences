@@ -34,8 +34,6 @@ struct RecallDiffView: View {
                         RoundedRectangle(cornerRadius: 12)
                             .fill(Color(.secondarySystemBackground))
                     )
-
-                    legend
                 } else {
                     Text("差分データを読み込めませんでした")
                         .foregroundStyle(.secondary)
@@ -82,25 +80,6 @@ struct RecallDiffView: View {
                     .strikethrough()
                     .foregroundStyle(.orange)
             }
-        }
-    }
-
-    private var legend: some View {
-        HStack(spacing: 16) {
-            legendItem(color: .green, label: "言えた")
-            legendItem(color: .red, label: "言えなかった")
-            legendItem(color: .orange, label: "余分な語")
-        }
-        .font(.caption)
-    }
-
-    private func legendItem(color: Color, label: String) -> some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(color)
-                .frame(width: 8, height: 8)
-            Text(label)
-                .foregroundStyle(.secondary)
         }
     }
 

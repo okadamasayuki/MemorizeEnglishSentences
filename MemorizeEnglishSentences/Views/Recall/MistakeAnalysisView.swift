@@ -75,10 +75,6 @@ struct MistakeAnalysisView: View {
 
     private var heatmapSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("赤が濃い単語ほど間違えやすい箇所です(挑戦 \(attempts.count) 回)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
             FlowLayout(spacing: 4, lineSpacing: 8) {
                 ForEach(wordStats) { stat in
                     Text(stat.display)
@@ -103,9 +99,6 @@ struct MistakeAnalysisView: View {
 
     private var historySection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("試行履歴")
-                .font(.headline)
-
             VStack(spacing: 6) {
                 ForEach(attempts) { attempt in
                     NavigationLink {
