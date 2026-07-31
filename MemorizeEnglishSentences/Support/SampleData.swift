@@ -3,21 +3,12 @@ import SwiftData
 
 /// 初回起動時にサンプル英文を登録する(削除後に復活しないよう UserDefaults でガード)
 enum SampleData {
-    private static let seededKey = "didSeedSampleData"
+    private static let seededKey = "didSeedSampleData_v2"
 
-    static func seedIfNeeded(context: ModelContext) {
-        guard !UserDefaults.standard.bool(forKey: seededKey) else { return }
-
-        let descriptor = FetchDescriptor<Passage>()
-        let count = (try? context.fetchCount(descriptor)) ?? 0
-        guard count == 0 else {
-            UserDefaults.standard.set(true, forKey: seededKey)
-            return
-        }
-
-        insert(
-            title: "【例】北風と太陽",
-            sentences: [
+    private static let samples: [(title: String, sentences: [(String, String)])] = [
+        (
+            "【例】北風と太陽",
+            [
                 ("The North Wind and the Sun were disputing which was the stronger, when a traveler came along wrapped in a warm cloak.",
                  "北風と太陽が、どちらが強いかで言い争っていると、暖かい外套を着た旅人がやって来ました。"),
                 ("They agreed that the one who first made the traveler take his cloak off should be considered stronger than the other.",
@@ -30,13 +21,11 @@ enum SampleData {
                  "次に太陽が暖かく照りつけると、旅人はすぐに外套を脱ぎました。"),
                 ("And so the North Wind had to admit that the Sun was the stronger of the two.",
                  "こうして北風は、太陽の方が強いと認めざるを得ませんでした。"),
-            ],
-            context: context
-        )
-
-        insert(
-            title: "【例】自己紹介",
-            sentences: [
+            ]
+        ),
+        (
+            "【例】自己紹介",
+            [
                 ("Hello, my name is Ken, and I'm from Osaka.",
                  "こんにちは、私の名前はケンで、大阪出身です。"),
                 ("I have been studying English for two years.",
@@ -47,9 +36,50 @@ enum SampleData {
                  "毎朝、30 分間英語の本を読みます。"),
                 ("Practice makes perfect.",
                  "継続は力なり。"),
-            ],
-            context: context
-        )
+            ]
+        ),
+        (
+            "【例】空港での会話",
+            [
+                ("Excuse me, could you tell me where the boarding gate is?",
+                 "すみません、搭乗ゲートがどこか教えていただけますか。"),
+                ("I'd like a window seat, if possible.",
+                 "できれば窓側の席をお願いします。"),
+                ("How long does the flight take?",
+                 "フライトはどのくらいかかりますか。"),
+                ("My suitcase didn't come out, so where should I report it?",
+                 "スーツケースが出てこなかったのですが、どこに届け出ればいいですか。"),
+                ("Thank you so much for your help.",
+                 "助けていただき本当にありがとうございます。"),
+            ]
+        ),
+        (
+            "【例】英語の名言",
+            [
+                ("The best way to predict the future is to invent it.",
+                 "未来を予測する最善の方法は、自らそれを創り出すことだ。"),
+                ("It always seems impossible until it is done.",
+                 "何事も、成し遂げるまでは不可能に思えるものだ。"),
+                ("If you can dream it, you can do it.",
+                 "夢見ることができれば、それは実現できる。"),
+                ("Success is not final, and failure is not fatal; it is the courage to continue that counts.",
+                 "成功は終わりではなく、失敗は致命的ではない。大切なのは続ける勇気だ。"),
+                ("Stay hungry, stay foolish.",
+                 "ハングリーであれ、愚か者であれ。"),
+            ]
+        ),
+    ]
+
+    static func seedIfNeeded(context: ModelContext) {
+        guard !UserDefaults.standard.bool(forKey: seededKey) else { return }
+
+        // 同じタイトルの文章がなければ追加する(既存インストールにも新しい例を配布できる)
+        let descriptor = FetchDescriptor<Passage>()
+        let existingTitles = Set((try? context.fetch(descriptor))?.map(\.title) ?? [])
+
+        for sample in samples where !existingTitles.contains(sample.title) {
+            insert(title: sample.title, sentences: sample.sentences, context: context)
+        }
 
         try? context.save()
         UserDefaults.standard.set(true, forKey: seededKey)
