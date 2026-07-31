@@ -104,17 +104,10 @@ struct RecallSessionView: View {
                 .buttonStyle(.plain)
             }
         }
-        // タイトルは空白 1 文字にして、見出しなしで上部の余白だけ確保する
-        .alert(" ", isPresented: $showRenameAlert) {
-            TextField("タイトル", text: $editingTitle)
-            Button("保存") {
-                let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
-                    passage.title = trimmed
-                    try? context.save()
-                }
+        .overlay {
+            if showRenameAlert {
+                renameDialog
             }
-            Button("キャンセル", role: .cancel) {}
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -137,6 +130,49 @@ struct RecallSessionView: View {
         .onDisappear {
             speech.stop()
             try? context.save()
+        }
+    }
+
+    /// タイトル編集ダイアログ(見出しなし・上下の余白を均等に)
+    private var renameDialog: some View {
+        ZStack {
+            Color.black.opacity(0.25)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    showRenameAlert = false
+                }
+
+            VStack(spacing: 14) {
+                TextField("タイトル", text: $editingTitle)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack(spacing: 10) {
+                    Button("キャンセル", role: .cancel) {
+                        showRenameAlert = false
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(maxWidth: .infinity)
+
+                    Button("保存") {
+                        let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            passage.title = trimmed
+                            try? context.save()
+                        }
+                        showRenameAlert = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .frame(maxWidth: .infinity)
+                    .disabled(editingTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(.systemBackground))
+            )
+            .frame(maxWidth: 300)
+            .shadow(color: .black.opacity(0.2), radius: 20)
         }
     }
 
