@@ -32,6 +32,21 @@ enum MemorizationStatus: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// 単語タブの 1 項目(英語フレーズ+和訳)
+@Model
+final class VocabWord {
+    /// 表示順(音声の収録順)
+    var index: Int
+    var english: String
+    var japanese: String
+
+    init(index: Int, english: String, japanese: String) {
+        self.index = index
+        self.english = english
+        self.japanese = japanese
+    }
+}
+
 @Model
 final class Passage {
     var title: String

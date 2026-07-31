@@ -11,12 +11,16 @@ struct RootTabView: View {
             Tab("暗記", systemImage: "brain.fill") {
                 RecallListView()
             }
+            Tab("単語", systemImage: "textformat.abc") {
+                VocabListView()
+            }
         }
         .task {
             SampleData.seedIfNeeded(context: context)
             SampleData.applyDefaultStatusIfNeeded(context: context)
             SampleData.splitReadingAndRecallIfNeeded(context: context)
             SampleData.seedBookPhotosIfNeeded(context: context)
+            VocabSeedData.seedIfNeeded(context: context)
         }
     }
 }

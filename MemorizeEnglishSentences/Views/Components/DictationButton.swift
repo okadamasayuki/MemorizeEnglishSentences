@@ -14,7 +14,7 @@ struct DictationButton: View {
                     Task { await speech.toggle() }
                 } label: {
                     Image(systemName: speech.isRecording ? "stop.circle.fill" : "mic.circle.fill")
-                        .font(.system(size: 38))
+                        .font(.system(size: 46))
                         .foregroundStyle(speech.isRecording ? Color.red : Color.accentColor)
                 }
                 .buttonStyle(.borderless)

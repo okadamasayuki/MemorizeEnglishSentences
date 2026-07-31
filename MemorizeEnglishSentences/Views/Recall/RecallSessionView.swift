@@ -42,23 +42,25 @@ struct RecallSessionView: View {
                         Spacer()
                     }
 
+                    // 歩きながらでも読みやすいよう、本文はすべて大きめの文字にする
                     Text(passage.japaneseFullText.isEmpty ? "(和訳がありません — 登録し直して翻訳してください)" : passage.japaneseFullText)
-                        .font(.body)
+                        .font(.title3)
+                        .lineSpacing(6)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     if showHint {
                         Text(hintKeywords.joined(separator: " ・ "))
-                            .font(.subheadline)
+                            .font(.body)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     if showAnswer {
                         // 単語を長押しすると和訳を表示(無音。発音はシート内のボタンで再生)
-                        FlowLayout(spacing: 5, lineSpacing: 8) {
+                        FlowLayout(spacing: 6, lineSpacing: 10) {
                             ForEach(WordTokenizer.tokenize(referenceText)) { token in
                                 Text(token.display)
-                                    .font(.body)
+                                    .font(.title3)
                                     .onLongPressGesture {
                                         let word = token.normalized.isEmpty ? token.display : token.normalized
                                         showWord(word)
@@ -70,7 +72,8 @@ struct RecallSessionView: View {
 
                     if !speech.fullText.isEmpty || speech.isRecording {
                         Text(speech.fullText.isEmpty ? "..." : speech.fullText)
-                            .font(.body)
+                            .font(.title3)
+                            .lineSpacing(4)
                             .foregroundStyle(speech.isRecording ? .primary : .secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -98,7 +101,7 @@ struct RecallSessionView: View {
                     speech.restartClean()
                 } label: {
                     Image(systemName: "arrow.counterclockwise.circle.fill")
-                        .font(.system(size: 38))
+                        .font(.system(size: 46))
                         .foregroundStyle(speech.fullText.isEmpty ? Color(.systemGray3) : Color.orange)
                 }
                 .buttonStyle(.borderless)
@@ -110,7 +113,7 @@ struct RecallSessionView: View {
                     confirmAnswer()
                 } label: {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 38))
+                        .font(.system(size: 46))
                         .foregroundStyle(currentAnswer.isEmpty ? Color(.systemGray3) : Color.green)
                 }
                 .buttonStyle(.borderless)
