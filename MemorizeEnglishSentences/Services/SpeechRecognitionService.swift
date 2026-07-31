@@ -116,7 +116,10 @@ final class SpeechRecognitionService {
         guard source === request else { return }
         if let result {
             if result.isFinal {
-                appendConfirmed(result.bestTranscription.formattedString)
+                // final が直前の部分認識より短いことがあるため、長い方を採用して消失を防ぐ
+                let finalText = result.bestTranscription.formattedString
+                let chosen = finalText.count >= partialText.count ? finalText : partialText
+                appendConfirmed(chosen)
                 partialText = ""
                 if isRecording, autoRestart {
                     restartRecognition()
@@ -128,7 +131,7 @@ final class SpeechRecognitionService {
                 }
                 return
             } else {
-                partialText = result.bestTranscription.formattedString
+                updatePartial(result.bestTranscription.formattedString)
             }
         }
         if error != nil {
@@ -149,6 +152,15 @@ final class SpeechRecognitionService {
         guard !partialText.isEmpty else { return }
         appendConfirmed(partialText)
         partialText = ""
+    }
+
+    /// 部分認識の更新。認識器の内部リセットで大幅に短くなったときは
+    /// それまでの内容を確定分へ退避してから置き換える(表示が消えるのを防ぐ)
+    private func updatePartial(_ newText: String) {
+        if partialText.count > 20, newText.count < partialText.count / 2 {
+            salvagePartial()
+        }
+        partialText = newText
     }
 
     private func appendConfirmed(_ segment: String) {
