@@ -26,17 +26,7 @@ struct RecallListView: View {
                                     Text(rowText(for: passage))
                                         .font(.headline)
                                         .lineLimit(1)
-                                    HStack(spacing: 8) {
-                                        statusBadge(passage.memorizationStatus)
-                                        if let latest = passage.latestAttempt {
-                                            Text("直近正答率 \(Int(latest.accuracy * 100))%")
-                                                .foregroundStyle(accuracyColor(latest.accuracy))
-                                        } else {
-                                            Text("未挑戦")
-                                        }
-                                    }
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    statusBadge(passage.memorizationStatus)
                                 }
                             }
                         }
@@ -79,14 +69,6 @@ struct RecallListView: View {
         Image(systemName: status.iconName)
             .font(.footnote)
             .foregroundStyle(status.color)
-    }
-
-    private func accuracyColor(_ accuracy: Double) -> Color {
-        switch accuracy {
-        case 0.8...: .green
-        case 0.5..<0.8: .orange
-        default: .red
-        }
     }
 }
 
