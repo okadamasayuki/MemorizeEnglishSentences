@@ -106,12 +106,14 @@ final class SpeechRecognitionService {
 
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             Task { @MainActor [weak self] in
-                self?.handle(result: result, error: error)
+                self?.handle(result: result, error: error, from: request)
             }
         }
     }
 
-    private func handle(result: SFSpeechRecognitionResult?, error: Error?) {
+    private func handle(result: SFSpeechRecognitionResult?, error: Error?, from source: SFSpeechAudioBufferRecognitionRequest) {
+        // 再開後に届く古いタスクのコールバックは無視する(テキストが巻き戻るのを防ぐ)
+        guard source === request else { return }
         if let result {
             if result.isFinal {
                 appendConfirmed(result.bestTranscription.formattedString)
@@ -130,6 +132,9 @@ final class SpeechRecognitionService {
             }
         }
         if error != nil {
+            // final が届かないままエラーで終わることがある(約 1 分制限など)。
+            // 認識途中のテキストを確定分に退避してから再開し、回答が消えないようにする。
+            salvagePartial()
             if isRecording, autoRestart {
                 restartRecognition()
             } else {
@@ -137,6 +142,13 @@ final class SpeechRecognitionService {
                 cleanup()
             }
         }
+    }
+
+    /// 未確定の部分認識テキストを確定テキストへ退避する
+    private func salvagePartial() {
+        guard !partialText.isEmpty else { return }
+        appendConfirmed(partialText)
+        partialText = ""
     }
 
     private func appendConfirmed(_ segment: String) {
