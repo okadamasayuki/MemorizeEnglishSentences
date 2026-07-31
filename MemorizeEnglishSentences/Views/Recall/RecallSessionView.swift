@@ -244,11 +244,16 @@ struct RecallSessionView: View {
     }
 
     /// ヒント用: 英文の語順どおりに単語ごとの和訳を作る。
-    /// 内蔵辞書 → キャッシュの順で引き、見つからない語は英語のまま出す。
+    /// 内蔵辞書 → キャッシュの順で引く。冠詞や訳の見つからない語は
+    /// 英語のまま出さず、ヒントから省く(ヒントは日本語だけにする)。
     private func buildHint() {
+        let skipWords: Set<String> = ["a", "an", "the"]
         let tokens = WordTokenizer.tokenize(referenceText)
-        hintWords = tokens.map { token in
+        hintWords = tokens.compactMap { token in
             let word = token.normalized.isEmpty ? token.display : token.normalized
+            if skipWords.contains(word.lowercased()) {
+                return nil
+            }
             if let entry = BasicWordDictionary.lookup(word) {
                 return firstSense(entry)
             }
@@ -256,10 +261,18 @@ struct RecallSessionView: View {
             let descriptor = FetchDescriptor<WordCacheEntry>(
                 predicate: #Predicate { $0.word == target }
             )
-            if let cached = try? context.fetch(descriptor).first {
+            if let cached = try? context.fetch(descriptor).first, containsJapanese(cached.japanese) {
                 return firstSense(cached.japanese)
             }
-            return token.display
+            return nil
+        }
+    }
+
+    /// 日本語(かな・カナ・漢字)を含むか。英語のままのキャッシュをヒントに出さないための判定
+    private func containsJapanese(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            (0x3040...0x30FF).contains(scalar.value)   // ひらがな・カタカナ
+                || (0x4E00...0x9FFF).contains(scalar.value) // 漢字
         }
     }
 
