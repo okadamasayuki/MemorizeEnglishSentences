@@ -7,6 +7,28 @@ private struct SelectedWord: Identifiable {
     let word: String
 }
 
+private struct TranslationTimeoutError: Error {}
+
+/// 翻訳にタイムアウトを付ける(起動直後はエラーも返さず固まることがあるため)
+private func translate(
+    _ session: TranslationSession, _ text: String, timeoutSeconds: Double
+) async throws -> String {
+    try await withThrowingTaskGroup(of: String.self) { group in
+        group.addTask {
+            try await session.translate(text).targetText
+        }
+        group.addTask {
+            try await Task.sleep(for: .seconds(timeoutSeconds))
+            throw TranslationTimeoutError()
+        }
+        guard let result = try await group.next() else {
+            throw TranslationTimeoutError()
+        }
+        group.cancelAll()
+        return result
+    }
+}
+
 /// 単語翻訳のリクエストを、常駐している翻訳セッションへ流し込むための橋渡し。
 /// (タップごとに invalidate() でセッションを作り直す方式は、シート表示と
 ///  タイミングが重なる初回タップで再実行されないことがあるため)
@@ -182,14 +204,14 @@ struct PassageListView: View {
                 // その場合は少し待ってセッションを作り直す。
                 print("[WT] task started")
                 do {
-                    let r = try await session.translate("hello")
-                    print("[WT] warmup ok: \(r.targetText)")
+                    let r = try await translate(session, "hello", timeoutSeconds: 3)
+                    print("[WT] warmup ok: \(r)")
                     warmupRetryCount = 0
                 } catch {
                     print("[WT] warmup error (retry \(warmupRetryCount)): \(error)")
-                    if warmupRetryCount < 5 {
+                    if warmupRetryCount < 8 {
                         warmupRetryCount += 1
-                        try? await Task.sleep(for: .seconds(1))
+                        try? await Task.sleep(for: .seconds(0.5))
                         wordConfiguration?.invalidate()
                         return
                     }
@@ -198,12 +220,12 @@ struct PassageListView: View {
                 for await target in wordBroker.requests() {
                     print("[WT] translating '\(target)'")
                     do {
-                        let response = try await session.translate(target)
-                        print("[WT] translated '\(target)' -> \(response.targetText)")
+                        let translated = try await translate(session, target, timeoutSeconds: 10)
+                        print("[WT] translated '\(target)' -> \(translated)")
                         if selectedWord?.word == target {
-                            wordJapanese = response.targetText
+                            wordJapanese = translated
                         }
-                        saveWordCache(target, response.targetText)
+                        saveWordCache(target, translated)
                     } catch {
                         print("[WT] translate error '\(target)': \(error)")
                         // セッション不良の可能性があるので、作り直して 1 回だけ再翻訳
