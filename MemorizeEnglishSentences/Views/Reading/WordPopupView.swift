@@ -64,8 +64,13 @@ struct WordPopupView: View {
         }
     }
 
-    /// キャッシュ → なければ翻訳して保存(オフライン・即時表示)
+    /// 内蔵辞書 → キャッシュ → なければ翻訳して保存(オフライン・即時表示)
     private func loadFromCacheOrTranslate() {
+        // 基本単語は内蔵辞書を最優先(単語単独の機械翻訳は音訳することがあるため)
+        if let entry = BasicWordDictionary.lookup(word) {
+            japanese = entry
+            return
+        }
         let target = word
         let descriptor = FetchDescriptor<WordCacheEntry>(
             predicate: #Predicate { $0.word == target }
