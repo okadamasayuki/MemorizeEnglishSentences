@@ -24,7 +24,7 @@ struct RecallListView: View {
                                         .font(.headline)
                                         .lineLimit(1)
                                     HStack(spacing: 8) {
-                                        Text("\(passage.blocks.count) 文")
+                                        statusBadge(passage.memorizationStatus)
                                         if let latest = passage.latestAttempt {
                                             Text("直近正答率 \(Int(latest.accuracy * 100))%")
                                                 .foregroundStyle(accuracyColor(latest.accuracy))
@@ -66,11 +66,30 @@ struct RecallListView: View {
         try? context.save()
     }
 
+    private func statusBadge(_ status: MemorizationStatus) -> some View {
+        Text(status.labelJa)
+            .font(.caption.bold())
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(status.color.opacity(0.15)))
+            .foregroundStyle(status.color)
+    }
+
     private func accuracyColor(_ accuracy: Double) -> Color {
         switch accuracy {
         case 0.8...: .green
         case 0.5..<0.8: .orange
         default: .red
+        }
+    }
+}
+
+extension MemorizationStatus {
+    var color: Color {
+        switch self {
+        case .needsReview: .red
+        case .normal: .orange
+        case .memorized: .green
         }
     }
 }

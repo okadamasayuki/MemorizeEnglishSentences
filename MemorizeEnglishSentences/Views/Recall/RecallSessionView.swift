@@ -1,10 +1,11 @@
 import SwiftData
 import SwiftUI
 
-/// 日本語訳だけを全文表示 → 音声入力で英文全文を一気に回答、または「答えを見る」
+/// タイトルを見て英文全文を音声で回答、または「答えを見る」。
+/// タイトルはタップで編集でき、習熟ステータス(要復習/普通/覚えた!)を登録できる。
 struct RecallSessionView: View {
     @Environment(\.modelContext) private var context
-    let passage: Passage
+    @Bindable var passage: Passage
 
     @State private var speech = SpeechRecognitionService()
     @State private var showAnswer = false
@@ -19,12 +20,18 @@ struct RecallSessionView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("日本語訳")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(passage.japaneseFullText.isEmpty ? "(和訳がありません — 音読タブで翻訳してください)" : passage.japaneseFullText)
-                        .font(.body)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    // タイトル(タップで編集できる)
+                    TextField("タイトル", text: $passage.title, axis: .vertical)
+                        .font(.title3.bold())
+                        .onSubmit { try? context.save() }
+
+                    // 習熟ステータス
+                    Picker("習熟度", selection: statusBinding) {
+                        ForEach(MemorizationStatus.allCases) { status in
+                            Text(status.labelJa).tag(status)
+                        }
+                    }
+                    .pickerStyle(.segmented)
 
                     if showAnswer {
                         Divider()
@@ -82,7 +89,6 @@ struct RecallSessionView: View {
             }
             .padding()
         }
-        .navigationTitle(passage.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -104,7 +110,18 @@ struct RecallSessionView: View {
         }
         .onDisappear {
             speech.stop()
+            try? context.save()
         }
+    }
+
+    private var statusBinding: Binding<MemorizationStatus> {
+        Binding(
+            get: { passage.memorizationStatus },
+            set: { newValue in
+                passage.memorizationStatus = newValue
+                try? context.save()
+            }
+        )
     }
 
     private var currentAnswer: String {

@@ -1,10 +1,29 @@
 import Foundation
 import SwiftData
 
+/// 暗記の習熟ステータス
+enum MemorizationStatus: String, Codable, CaseIterable, Identifiable {
+    case needsReview
+    case normal
+    case memorized
+
+    var id: String { rawValue }
+
+    var labelJa: String {
+        switch self {
+        case .needsReview: "要復習"
+        case .normal: "普通"
+        case .memorized: "覚えた!"
+        }
+    }
+}
+
 @Model
 final class Passage {
     var title: String
     var createdAt: Date
+    /// MemorizationStatus の rawValue(既存データは既定で「要復習」)
+    var memorizationStatusRaw: String = MemorizationStatus.needsReview.rawValue
 
     @Relationship(deleteRule: .cascade, inverse: \Block.passage)
     var blocks: [Block] = []
@@ -32,6 +51,11 @@ final class Passage {
 
     var latestAttempt: RecallAttempt? {
         attempts.max { $0.date < $1.date }
+    }
+
+    var memorizationStatus: MemorizationStatus {
+        get { MemorizationStatus(rawValue: memorizationStatusRaw) ?? .needsReview }
+        set { memorizationStatusRaw = newValue.rawValue }
     }
 }
 
