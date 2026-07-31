@@ -43,14 +43,13 @@ struct RecallSessionView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     if showAnswer {
-                        // 単語を長押しすると和訳の表示と発音の再生
+                        // 単語を長押しすると和訳を表示(無音。発音はシート内のボタンで再生)
                         FlowLayout(spacing: 5, lineSpacing: 8) {
                             ForEach(WordTokenizer.tokenize(referenceText)) { token in
                                 Text(token.display)
                                     .font(.body)
                                     .onLongPressGesture {
                                         let word = token.normalized.isEmpty ? token.display : token.normalized
-                                        SpeechSynthesisService.shared.speak(word)
                                         showWord(word)
                                     }
                             }
