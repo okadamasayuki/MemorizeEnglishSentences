@@ -11,7 +11,8 @@ struct RootTabView: View {
             Tab("暗記", systemImage: "brain.fill") {
                 RecallListView()
             }
-            Tab("単語", systemImage: "textformat.abc") {
+            // 単語カードの束をイメージしたアイコン
+            Tab("単語", systemImage: "rectangle.stack.fill") {
                 VocabListView()
             }
         }
