@@ -19,9 +19,11 @@ struct AddPassageView: View {
     @State private var sentences: [String] = []
     @State private var speech = SpeechRecognitionService()
 
-    @State private var photoItem: PhotosPickerItem?
+    @State private var photoItems: [PhotosPickerItem] = []
     @State private var showCamera = false
     @State private var isRecognizing = false
+    /// 複数枚取り込み中の進捗(例: 3/12)
+    @State private var recognizeProgress: (done: Int, total: Int)?
     @State private var ocrError: String?
 
     @State private var editingIndex: Int?
@@ -160,12 +162,28 @@ struct AddPassageView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
-                PhotosPicker(selection: $photoItem, matching: .images) {
+                // 複数枚を一度に選んでまとめて取り込める
+                PhotosPicker(
+                    selection: $photoItems,
+                    maxSelectionCount: 0,
+                    selectionBehavior: .ordered,
+                    matching: .images
+                ) {
                     Image(systemName: "photo.fill")
                         .font(.system(size: 30))
                 }
                 .buttonStyle(.borderless)
                 Spacer()
+            }
+
+            // 複数枚取り込み中の進捗表示
+            if let progress = recognizeProgress {
+                ProgressView(value: Double(progress.done), total: Double(progress.total)) {
+                    Text("写真を読み取り中… \(progress.done)/\(progress.total)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 4)
             }
 
             Spacer()
@@ -177,30 +195,45 @@ struct AddPassageView: View {
             }
             .ignoresSafeArea()
         }
-        .onChange(of: photoItem) {
-            guard let photoItem else { return }
-            Task {
-                if let data = try? await photoItem.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    await recognize(image)
-                } else {
-                    ocrError = "写真を読み込めませんでした。"
-                }
-                self.photoItem = nil
-            }
+        .onChange(of: photoItems) {
+            guard !photoItems.isEmpty else { return }
+            let items = photoItems
+            Task { await recognizeAll(items) }
         }
     }
 
-    /// 写真から英文を OCR してエディタへ追記する
-    private func recognize(_ image: UIImage) async {
+    /// 選んだ写真を選択順に OCR して、まとめてエディタへ追記する
+    private func recognizeAll(_ items: [PhotosPickerItem]) async {
         ocrError = nil
         isRecognizing = true
-        defer { isRecognizing = false }
-        do {
-            let recognized = try await TextRecognitionService.recognizeEnglishText(in: image)
-            text = text.isEmpty ? recognized : text + "\n" + recognized
-        } catch {
-            ocrError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        recognizeProgress = (0, items.count)
+        defer {
+            isRecognizing = false
+            recognizeProgress = nil
+            photoItems = []
+        }
+
+        var failedCount = 0
+        for (offset, item) in items.enumerated() {
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let image = UIImage(data: data) {
+                do {
+                    let recognized = try await TextRecognitionService.recognizeEnglishText(in: image)
+                    if !recognized.isEmpty {
+                        // ページ間は段落境界として空行で区切る
+                        text = text.isEmpty ? recognized : text + "\n\n" + recognized
+                    }
+                } catch {
+                    failedCount += 1
+                }
+            } else {
+                failedCount += 1
+            }
+            recognizeProgress = (offset + 1, items.count)
+        }
+
+        if failedCount > 0 {
+            ocrError = "\(items.count) 枚中 \(failedCount) 枚を読み取れませんでした。"
         }
     }
 
