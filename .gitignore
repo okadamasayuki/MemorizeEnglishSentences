@@ -19,3 +19,6 @@ xcuserdata/
 
 # macOS
 .DS_Store
+
+# 教材由来のローカルデータ(リポジトリに含めない)
+local-data/

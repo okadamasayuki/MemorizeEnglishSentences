@@ -16,6 +16,8 @@
 | `verify_pass.py` | 独立した再OCRとの単語列・句読点列の突き合わせ |
 | `verify_titles.py` | 日本語見出しの突き合わせ |
 | `make_import_json.py` | 確定データからアプリ取り込み用JSONを生成 |
+| `word_inventory.py` | 単語の意味の事前生成の対象語を抽出(アプリと同一のトークナイズ規則) |
+| `build_word_senses.py` | 訳語辞書+オーバーライドから word_senses.json を網羅検証つきで生成 |
 
 スクリプトのレイアウト前提(「Content Block」ラベル、右端の音声トラック番号、下端のページ番号)は
 特定の教材シリーズ向けなので、別レイアウトの教材では `parse.py` の調整が必要。

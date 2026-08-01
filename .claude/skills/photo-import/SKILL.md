@@ -30,6 +30,18 @@ description: 書籍ページのスクショ/写真から英文を抽出してア
 6. 2〜5で出た差分は**必ず原画像をReadして目視で決着**させる(再OCR側の誤読のことも多い。AI→Al、SpaceXのX欠落、行断片の重複読みが常連)
 7. 端末反映後、`passages_export.json` を取得して投入元と完全一致・和訳の充足を確認する
 
+## 単語の意味の自動生成(取り込みとセットで必ず行う)
+
+ユーザーの standing request: 本文の取り込み後、各内容語に「その文中での品詞・訳語」を付けて端末キャッシュに投入する。**生成はAPIではなくClaude Code自身が行う(課金なし)**。
+
+1. `python3 word_inventory.py parsed.json ../../local-data/word-glosses/base_gloss.json` — 対象語を抽出し、基礎辞書にない新出語を `new_words.txt` に出す(トークナイズはアプリの WordTokenizer.normalize+機能語除外と完全一致)
+2. 新出語に品詞・訳語(目安15文字以内の簡潔な訳語)を割り当て、`local-data/word-glosses/base_gloss.json` に追記する。訳語はこの教材での使われ方に合わせる
+3. 多義語(文脈で訳が変わる語: run/right/left/work/train/matter 等)は出現文脈を確認し、`local-data/word-glosses/overrides.tsv` に「ブロックハッシュ\t単語\t品詞\t訳語」で追記
+4. `python3 build_word_senses.py words_by_block.json ../../local-data/word-glosses/base_gloss.json ../../local-data/word-glosses/overrides.tsv` — 網羅検証つきで `word_senses.json` を生成
+5. `word_senses.json` を `Documents/word_senses.json` へ devicectl copy → アプリ起動で取り込み → `word_senses_result.json` を取得して imported 件数を検証
+
+`local-data/` は gitignore 済みのMacローカル保存領域。訳語辞書・教材由来データはリポジトリにコミットしない。
+
 ## 端末への反映
 
 - 取り込み: `import_passages.json`(`make_import_json.py` で生成)を `devicectl device copy to ... --destination "Documents/import_passages.json" --domain-type appDataContainer --domain-identifier com.okadamasayuki.MemorizeEnglishSentences` で転送 → アプリ起動で取り込み(タイトル重複はスキップ、取り込み後ファイル自動削除)
