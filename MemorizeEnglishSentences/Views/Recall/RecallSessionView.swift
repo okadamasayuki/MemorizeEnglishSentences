@@ -7,10 +7,8 @@ import Translation
 struct RecallSessionView: View {
     @Environment(\.modelContext) private var context
 
-    /// 一覧から開いた文章。スワイプ移動後は current が現在の文章になる
+    /// 一覧から開いた文章
     private let initialPassage: Passage
-    @State private var current: Passage?
-    private var passage: Passage { current ?? initialPassage }
 
     // スワイプでの前後移動用に、一覧と同じ並び・絞り込みの文章リストを持つ
     private static let sortOrder: [SortDescriptor<Passage>] = [
@@ -27,8 +25,10 @@ struct RecallSessionView: View {
         self.initialPassage = passage
     }
 
-    /// スワイプ移動時に新しい文章が入ってくる側(スライドモーション用)
-    @State private var slideEdge: Edge = .trailing
+    /// ページングで表示する文章のスナップショット(開いた時点の並び・絞り込み)
+    @State private var pages: [Passage] = []
+    /// いま表示しているページの文章 ID
+    @State private var selectedID: PersistentIdentifier?
 
     @State private var speech = SpeechRecognitionService()
     @State private var showAnswer = false
@@ -46,94 +46,33 @@ struct RecallSessionView: View {
     @State private var warmupRetryCount = 0
     @State private var wordConfiguration: TranslationSession.Configuration?
 
+    private var passage: Passage {
+        pages.first { $0.persistentModelID == selectedID } ?? initialPassage
+    }
+
     private var referenceText: String {
         passage.englishFullText
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // 習熟ステータス(アイコンで選択)
-                    HStack(spacing: 44) {
-                        Spacer()
-                        // 「どちらでもない」はアイコンなし = どちらも未選択の状態
-                        ForEach([MemorizationStatus.needsReview, .memorized]) { status in
-                            statusButton(for: status)
-                        }
-                        Spacer()
-                    }
-
-                    // 歩きながらでも読みやすいよう、本文はすべて大きめの文字にする
-                    Text(passage.japaneseFullText.isEmpty ? "(和訳がありません — 登録し直して翻訳してください)" : passage.japaneseFullText)
-                        .font(.title3)
-                        .lineSpacing(6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if showHint {
-                        Text(hintKeywords.joined(separator: " ・ "))
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    if showAnswer {
-                        // 単語を長押しすると和訳を表示(無音。発音はシート内のボタンで再生)
-                        FlowLayout(spacing: 6, lineSpacing: 10) {
-                            ForEach(WordTokenizer.tokenize(referenceText)) { token in
-                                Text(token.display)
-                                    .font(.title3)
-                                    .onLongPressGesture {
-                                        let word = token.normalized.isEmpty ? token.display : token.normalized
-                                        showWord(word)
-                                    }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    if !speech.fullText.isEmpty || speech.isRecording {
-                        Text(speech.fullText.isEmpty ? "..." : speech.fullText)
-                            .font(.title3)
-                            .lineSpacing(4)
-                            .foregroundStyle(speech.isRecording ? .primary : .secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    if let error = speech.errorMessage {
-                        Text(error)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
-                }
-                .padding()
-                // 文章が切り替わったら、スワイプ方向へスライドして入れ替わる
-                .id(passage.persistentModelID)
-                .transition(
-                    .asymmetric(
-                        insertion: .move(edge: slideEdge).combined(with: .opacity),
-                        removal: .move(edge: slideEdge == .trailing ? .leading : .trailing)
-                            .combined(with: .opacity)
-                    )
-                )
-            }
-            // 余白をタップすると答えを表示/非表示
-            .contentShape(Rectangle())
-            .onTapGesture {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    showAnswer.toggle()
+            // ページをめくるように指に追従してスワイプで前後の文章へ移動できる
+            TabView(selection: $selectedID) {
+                ForEach(pages) { page in
+                    pageView(page)
+                        .tag(Optional(page.persistentModelID))
                 }
             }
-            // 左右スワイプで前後の文章へ移動(←スワイプ = 次へ)
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 40)
-                    .onEnded { value in
-                        guard abs(value.translation.width) > 60,
-                              abs(value.translation.width) > abs(value.translation.height) * 1.5
-                        else { return }
-                        move(value.translation.width > 0 ? -1 : 1)
-                    }
-            )
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .onChange(of: selectedID) {
+                // ページが替わったら回答・答え・ヒントをリセットして認識バイアスを合わせ直す
+                speech.stop()
+                speech.reset()
+                showAnswer = false
+                showHint = false
+                hintKeywords = []
+                configureSpeech()
+            }
 
             HStack(spacing: 44) {
                 Spacer()
@@ -249,6 +188,19 @@ struct RecallSessionView: View {
                     target: TranslationAvailability.japanese
                 )
             }
+            // ページ一覧のスナップショット(一覧と同じ並び・絞り込み)を作る
+            if pages.isEmpty {
+                var list = allPassages
+                if hideMemorized {
+                    let filtered = list.filter { $0.memorizationStatus != .memorized }
+                    // 開いた文章が絞り込みで消える場合は全件で表示する
+                    if filtered.contains(where: { $0.persistentModelID == initialPassage.persistentModelID }) {
+                        list = filtered
+                    }
+                }
+                pages = list.isEmpty ? [initialPassage] : list
+                selectedID = initialPassage.persistentModelID
+            }
             configureSpeech()
         }
         .onDisappear {
@@ -257,7 +209,74 @@ struct RecallSessionView: View {
         }
     }
 
-    private func statusButton(for status: MemorizationStatus) -> some View {
+    /// 1 ページ分(1 文章分)の表示
+    private func pageView(_ page: Passage) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                // 習熟ステータス(アイコンで選択)
+                HStack(spacing: 44) {
+                    Spacer()
+                    // 「どちらでもない」はアイコンなし = どちらも未選択の状態
+                    ForEach([MemorizationStatus.needsReview, .memorized]) { status in
+                        statusButton(for: status, of: page)
+                    }
+                    Spacer()
+                }
+
+                // 歩きながらでも読みやすいよう、本文はすべて大きめの文字にする
+                Text(page.japaneseFullText.isEmpty ? "(和訳がありません — 登録し直して翻訳してください)" : page.japaneseFullText)
+                    .font(.title3)
+                    .lineSpacing(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if showHint {
+                    Text(hintKeywords.joined(separator: " ・ "))
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if showAnswer {
+                    // 単語を長押しすると和訳を表示(無音。発音はシート内のボタンで再生)
+                    FlowLayout(spacing: 6, lineSpacing: 10) {
+                        ForEach(WordTokenizer.tokenize(page.englishFullText)) { token in
+                            Text(token.display)
+                                .font(.title3)
+                                .onLongPressGesture {
+                                    let word = token.normalized.isEmpty ? token.display : token.normalized
+                                    showWord(word)
+                                }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if !speech.fullText.isEmpty || speech.isRecording {
+                    Text(speech.fullText.isEmpty ? "..." : speech.fullText)
+                        .font(.title3)
+                        .lineSpacing(4)
+                        .foregroundStyle(speech.isRecording ? .primary : .secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if let error = speech.errorMessage {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+            }
+            .padding()
+        }
+        // 余白をタップすると答えを表示/非表示
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                showAnswer.toggle()
+            }
+        }
+    }
+
+    private func statusButton(for status: MemorizationStatus, of passage: Passage) -> some View {
         let isSelected = passage.memorizationStatus == status
         return Button {
             // 選択中をもう一度タップすると解除(どちらでもない)に戻る
@@ -288,32 +307,6 @@ struct RecallSessionView: View {
         speech.contextualStrings = Array(Set(words)).sorted()
     }
 
-    /// スワイプで前後の文章へ移動する(一覧と同じ並び・絞り込みに従う)
-    private func move(_ delta: Int) {
-        var list = allPassages
-        if hideMemorized {
-            let filtered = list.filter { $0.memorizationStatus != .memorized }
-            // 現在の文章が絞り込みで消えている場合は全件リストで移動する
-            if filtered.contains(where: { $0.persistentModelID == passage.persistentModelID }) {
-                list = filtered
-            }
-        }
-        guard let index = list.firstIndex(where: { $0.persistentModelID == passage.persistentModelID }),
-              list.indices.contains(index + delta)
-        else { return }
-
-        speech.stop()
-        speech.reset()
-        // 次へ(←スワイプ)は右から、前へ(→スワイプ)は左から新しい文章が入る
-        slideEdge = delta > 0 ? .trailing : .leading
-        withAnimation(.easeInOut(duration: 0.25)) {
-            current = list[index + delta]
-            showAnswer = false
-            showHint = false
-        }
-        hintKeywords = []
-        configureSpeech()
-    }
 
     /// 冠詞・代名詞・前置詞などの機能語(キーワードにしない語)
     private static let functionWords: Set<String> = [
