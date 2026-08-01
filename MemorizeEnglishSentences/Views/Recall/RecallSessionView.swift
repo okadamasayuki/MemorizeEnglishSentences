@@ -27,6 +27,9 @@ struct RecallSessionView: View {
         self.initialPassage = passage
     }
 
+    /// スワイプ移動時に新しい文章が入ってくる側(スライドモーション用)
+    @State private var slideEdge: Edge = .trailing
+
     @State private var speech = SpeechRecognitionService()
     @State private var showAnswer = false
     @State private var resultAttempt: RecallAttempt?
@@ -104,6 +107,15 @@ struct RecallSessionView: View {
                     }
                 }
                 .padding()
+                // 文章が切り替わったら、スワイプ方向へスライドして入れ替わる
+                .id(passage.persistentModelID)
+                .transition(
+                    .asymmetric(
+                        insertion: .move(edge: slideEdge).combined(with: .opacity),
+                        removal: .move(edge: slideEdge == .trailing ? .leading : .trailing)
+                            .combined(with: .opacity)
+                    )
+                )
             }
             // 余白をタップすると答えを表示/非表示
             .contentShape(Rectangle())
@@ -292,7 +304,9 @@ struct RecallSessionView: View {
 
         speech.stop()
         speech.reset()
-        withAnimation(.easeInOut(duration: 0.15)) {
+        // 次へ(←スワイプ)は右から、前へ(→スワイプ)は左から新しい文章が入る
+        slideEdge = delta > 0 ? .trailing : .leading
+        withAnimation(.easeInOut(duration: 0.25)) {
             current = list[index + delta]
             showAnswer = false
             showHint = false
