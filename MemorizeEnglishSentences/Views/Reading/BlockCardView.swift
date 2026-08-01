@@ -60,6 +60,9 @@ struct BlockCardView: View {
                             Text(group.ja)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                                // カスタムレイアウトと縦積みしても1行に切り詰められないよう、
+                                // 必要な行数の高さを必ず確保する
+                                .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
