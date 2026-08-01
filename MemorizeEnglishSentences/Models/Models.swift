@@ -129,6 +129,25 @@ final class WordCacheEntry {
     }
 }
 
+/// 文脈つき単語意味のキャッシュ(同じ文の同じ単語で再課金しない)
+@Model
+final class WordSenseCacheEntry {
+    /// "単語|文のハッシュ" 形式の一意キー
+    @Attribute(.unique) var key: String
+    var word: String
+    var posJa: String
+    var meaningJa: String
+    var updatedAt: Date
+
+    init(key: String, word: String, posJa: String, meaningJa: String, updatedAt: Date = .now) {
+        self.key = key
+        self.word = word
+        self.posJa = posJa
+        self.meaningJa = meaningJa
+        self.updatedAt = updatedAt
+    }
+}
+
 @Model
 final class RecallAttempt {
     var passage: Passage?

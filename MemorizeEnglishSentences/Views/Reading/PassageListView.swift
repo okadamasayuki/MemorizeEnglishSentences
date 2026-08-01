@@ -204,7 +204,7 @@ struct PassageListView: View {
                 isExpanded: expandedBlockIDs.contains(block.persistentModelID),
                 onToggle: { toggle(block) },
                 onWordTap: { word in
-                    showWord(word)
+                    showWord(word, sentenceContext: block.englishText)
                 },
                 suspiciousWords: issuesByBlock?[block.persistentModelID]?.suspiciousWords ?? [],
                 issueNotes: issuesByBlock?[block.persistentModelID]?.notes ?? []
@@ -252,11 +252,35 @@ struct PassageListView: View {
         withAnimation { issuesByBlock = result }
     }
 
-    /// 単語の意味を表示: 内蔵辞書 → キャッシュ → Apple 翻訳の順で解決
-    private func showWord(_ word: String) {
+    /// 単語の意味を表示。APIキー設定時は「その文の中での意味」を優先し、
+    /// 未設定・失敗時は従来の内蔵辞書 → キャッシュ → Apple 翻訳で解決する
+    private func showWord(_ word: String, sentenceContext: String) {
         wordMeaning.reset()
         selectedWord = SelectedWord(word: word)
 
+        // 事前生成済みの「この文中での意味」があれば最優先(無料・オフライン)
+        if let cached = WordSenseLookup.cached(word: word, blockText: sentenceContext, modelContext: context) {
+            wordMeaning.apply(cached)
+            return
+        }
+        // キャッシュにない単語は、APIキー設定時のみその場で取得
+        if ClaudeAPIService.isConfigured {
+            Task {
+                let sense = await WordSenseLookup.fetch(word: word, blockText: sentenceContext, modelContext: context)
+                guard selectedWord?.word == word else { return }
+                if let sense {
+                    wordMeaning.apply(sense)
+                } else {
+                    legacyLookup(word)
+                }
+            }
+            return
+        }
+        legacyLookup(word)
+    }
+
+    /// 従来の解決手段: 内蔵辞書 → キャッシュ → Apple 翻訳
+    private func legacyLookup(_ word: String) {
         if let entry = BasicWordDictionary.lookup(word) {
             wordMeaning.japanese = entry
             return

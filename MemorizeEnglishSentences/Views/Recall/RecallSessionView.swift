@@ -243,7 +243,7 @@ struct RecallSessionView: View {
                                 .font(.title3)
                                 .onLongPressGesture {
                                     let word = token.normalized.isEmpty ? token.display : token.normalized
-                                    showWord(word)
+                                    showWord(word, sentenceContext: page.englishFullText)
                                 }
                         }
                     }
@@ -351,11 +351,33 @@ struct RecallSessionView: View {
         token.display.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
     }
 
-    /// 単語の意味を表示: 内蔵辞書 → キャッシュ → Apple 翻訳の順で解決
-    private func showWord(_ word: String) {
+    /// 単語の意味を表示。事前生成済みの「この文中での意味」を最優先し、
+    /// なければ APIキー設定時はその場で取得、それ以外は従来手段で解決する
+    private func showWord(_ word: String, sentenceContext: String) {
         wordMeaning.reset()
         selectedWord = SelectedWord(word: word)
 
+        if let cached = WordSenseLookup.cached(word: word, blockText: sentenceContext, modelContext: context) {
+            wordMeaning.apply(cached)
+            return
+        }
+        if ClaudeAPIService.isConfigured {
+            Task {
+                let sense = await WordSenseLookup.fetch(word: word, blockText: sentenceContext, modelContext: context)
+                guard selectedWord?.word == word else { return }
+                if let sense {
+                    wordMeaning.apply(sense)
+                } else {
+                    legacyLookup(word)
+                }
+            }
+            return
+        }
+        legacyLookup(word)
+    }
+
+    /// 従来の解決手段: 内蔵辞書 → キャッシュ → Apple 翻訳
+    private func legacyLookup(_ word: String) {
         if let entry = BasicWordDictionary.lookup(word) {
             wordMeaning.japanese = entry
             return

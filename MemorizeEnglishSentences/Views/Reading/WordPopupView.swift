@@ -20,6 +20,15 @@ struct WordPopupView: View {
                     Text(":")
                         .font(.title3)
                         .foregroundStyle(.secondary)
+                    // 文脈対応のときは品詞も添える(例: 動詞「経営する」)
+                    if let pos = meaning.pos, !pos.isEmpty {
+                        Text(pos)
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                            .foregroundStyle(Color.accentColor)
+                    }
                     Text(japanese)
                         .font(.title3)
                 } else if failed {
@@ -29,6 +38,12 @@ struct WordPopupView: View {
                 } else {
                     ProgressView()
                 }
+            }
+
+            if meaning.isContextual {
+                Text("この文での意味")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             // 音声が聞けない場面用の読み方(カタカナ)
