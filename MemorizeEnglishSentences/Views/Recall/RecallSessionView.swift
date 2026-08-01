@@ -6,7 +6,26 @@ import Translation
 /// タイトルはタップで編集でき、習熟ステータス(要復習/どちらでもない/覚えた!)を登録できる。
 struct RecallSessionView: View {
     @Environment(\.modelContext) private var context
-    @Bindable var passage: Passage
+
+    /// 一覧から開いた文章。スワイプ移動後は current が現在の文章になる
+    private let initialPassage: Passage
+    @State private var current: Passage?
+    private var passage: Passage { current ?? initialPassage }
+
+    // スワイプでの前後移動用に、一覧と同じ並び・絞り込みの文章リストを持つ
+    private static let sortOrder: [SortDescriptor<Passage>] = [
+        SortDescriptor(\Passage.sortIndex),
+        SortDescriptor(\Passage.createdAt, order: .reverse),
+    ]
+    @Query(
+        filter: #Predicate<Passage> { $0.purposeRaw == "recall" },
+        sort: sortOrder
+    ) private var allPassages: [Passage]
+    @AppStorage("hideMemorized") private var hideMemorized = false
+
+    init(passage: Passage) {
+        self.initialPassage = passage
+    }
 
     @State private var speech = SpeechRecognitionService()
     @State private var showAnswer = false
@@ -93,6 +112,16 @@ struct RecallSessionView: View {
                     showAnswer.toggle()
                 }
             }
+            // 左右スワイプで前後の文章へ移動(→スワイプ = 次へ)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 40)
+                    .onEnded { value in
+                        guard abs(value.translation.width) > 60,
+                              abs(value.translation.width) > abs(value.translation.height) * 1.5
+                        else { return }
+                        move(value.translation.width > 0 ? 1 : -1)
+                    }
+            )
 
             HStack(spacing: 44) {
                 Spacer()
@@ -208,13 +237,7 @@ struct RecallSessionView: View {
                     target: TranslationAvailability.japanese
                 )
             }
-            // 長文ディクテーション: final 後に自動再開してセグメント連結
-            speech.autoRestart = true
-            // 正解英文の単語を認識バイアスとして渡し、正解に寄せて聞き取る
-            let words = WordTokenizer.tokenize(referenceText)
-                .map(\.normalized)
-                .filter { $0.count >= 2 }
-            speech.contextualStrings = Array(Set(words)).sorted()
+            configureSpeech()
         }
         .onDisappear {
             speech.stop()
@@ -240,6 +263,42 @@ struct RecallSessionView: View {
 
     private var currentAnswer: String {
         speech.fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 現在の文章に合わせて音声認識を設定する
+    private func configureSpeech() {
+        // 長文ディクテーション: final 後に自動再開してセグメント連結
+        speech.autoRestart = true
+        // 正解英文の単語を認識バイアスとして渡し、正解に寄せて聞き取る
+        let words = WordTokenizer.tokenize(referenceText)
+            .map(\.normalized)
+            .filter { $0.count >= 2 }
+        speech.contextualStrings = Array(Set(words)).sorted()
+    }
+
+    /// スワイプで前後の文章へ移動する(一覧と同じ並び・絞り込みに従う)
+    private func move(_ delta: Int) {
+        var list = allPassages
+        if hideMemorized {
+            let filtered = list.filter { $0.memorizationStatus != .memorized }
+            // 現在の文章が絞り込みで消えている場合は全件リストで移動する
+            if filtered.contains(where: { $0.persistentModelID == passage.persistentModelID }) {
+                list = filtered
+            }
+        }
+        guard let index = list.firstIndex(where: { $0.persistentModelID == passage.persistentModelID }),
+              list.indices.contains(index + delta)
+        else { return }
+
+        speech.stop()
+        speech.reset()
+        withAnimation(.easeInOut(duration: 0.15)) {
+            current = list[index + delta]
+            showAnswer = false
+            showHint = false
+        }
+        hintKeywords = []
+        configureSpeech()
     }
 
     /// 冠詞・代名詞・前置詞などの機能語(キーワードにしない語)
