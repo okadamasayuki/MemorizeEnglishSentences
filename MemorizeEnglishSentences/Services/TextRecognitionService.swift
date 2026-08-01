@@ -29,7 +29,10 @@ enum TextRecognitionService {
                 if text.isEmpty {
                     continuation.resume(throwing: TextRecognitionError.noText)
                 } else {
-                    continuation.resume(returning: text)
+                    // OCR の綴りミスを内蔵スペルチェッカーで自動補正してから返す
+                    Task { @MainActor in
+                        continuation.resume(returning: SentenceValidator.autocorrected(text))
+                    }
                 }
             }
             request.recognitionLevel = .accurate
