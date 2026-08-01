@@ -79,6 +79,35 @@ enum MacBridge {
         try? FileManager.default.removeItem(at: url)
     }
 
+    /// Claude Code が置いた word_senses.json(文中での単語の意味の事前生成データ)を取り込む。
+    /// 形式: [{"key": 単語|ブロックハッシュ, "word": 単語, "pos": 品詞, "meaning": 訳語}]
+    /// 取り込み後はファイルを削除し、結果を word_senses_result.json に書き出す。
+    static func importWordSensesIfAny(context: ModelContext) {
+        let url = documents.appendingPathComponent("word_senses.json")
+        guard let data = try? Data(contentsOf: url),
+              let list = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] else { return }
+
+        let descriptor = FetchDescriptor<WordSenseCacheEntry>()
+        let existing = Set(((try? context.fetch(descriptor)) ?? []).map(\.key))
+        var imported = 0
+        for item in list {
+            guard let key = item["key"],
+                  let word = item["word"],
+                  let pos = item["pos"],
+                  let meaning = item["meaning"],
+                  !existing.contains(key) else { continue }
+            context.insert(WordSenseCacheEntry(key: key, word: word, posJa: pos, meaningJa: meaning))
+            imported += 1
+        }
+        try? context.save()
+        try? FileManager.default.removeItem(at: url)
+
+        let result: [String: Int] = ["imported": imported, "totalInFile": list.count]
+        if let out = try? JSONSerialization.data(withJSONObject: result) {
+            try? out.write(to: documents.appendingPathComponent("word_senses_result.json"))
+        }
+    }
+
     /// Claude Code が置いた delete_passages.json を適用する。
     /// 形式: [ブロック英文の先頭文字列] — 先頭一致するブロックを含む音読の文章を削除する。
     /// 適用後はファイルを削除する。

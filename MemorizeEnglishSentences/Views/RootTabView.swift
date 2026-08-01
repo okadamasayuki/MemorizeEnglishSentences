@@ -30,6 +30,7 @@ struct RootTabView: View {
             // Mac(Claude Code)からの英文修正・文章追加を取り込み、最新の登録内容を書き出す
             MacBridge.applyCorrectionsIfAny(context: context)
             MacBridge.importPassagesIfAny(context: context)
+            MacBridge.importWordSensesIfAny(context: context)
             MacBridge.applyDeletionsIfAny(context: context)
             MacBridge.exportPassages(context: context)
             MacBridge.exportVoices()
