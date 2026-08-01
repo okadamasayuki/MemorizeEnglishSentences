@@ -28,6 +28,7 @@ struct RootTabView: View {
             MacBridge.applyCorrectionsIfAny(context: context)
             MacBridge.importPassagesIfAny(context: context)
             MacBridge.importWordSensesIfAny(context: context)
+            MacBridge.importSentencePairsIfAny(context: context)
             MacBridge.applyTranslationsIfAny(context: context)
             MacBridge.applyDeletionsIfAny(context: context)
             MacBridge.exportPassages(context: context)

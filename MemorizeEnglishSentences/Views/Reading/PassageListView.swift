@@ -192,7 +192,8 @@ struct PassageListView: View {
                 onToggle: { toggle(block) },
                 onWordTap: { word, occurrence in
                     showWord(word, occurrence: occurrence, sentenceContext: block.englishText)
-                }
+                },
+                sentencePairs: SentencePairLookup.cached(blockText: block.englishText, modelContext: context)
             )
             .allowsHitTesting(!isSelecting)
 

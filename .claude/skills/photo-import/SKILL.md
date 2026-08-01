@@ -48,4 +48,5 @@ description: 書籍ページのスクショ/写真から英文を抽出してア
 - 修正: `corrections.json`(`[{"old","new"}]`、英文完全一致で置換・和訳は自動リセット→再翻訳)
 - 削除: `delete_passages.json`(ブロック英文の先頭一致で文章ごと削除)
 - 和訳(全文): **Claude Code が全ブロックの和訳を自分で書き**、`ja_translations.tsv`(scratchpad、`sha256(英文.strip()).hex[:16]\t和訳`)に置いて `make_import_json.py` で import_passages.json に埋め込む。自然で簡潔な訳にし、原文の論旨(賛成/反対の立場)を保つ。既存ブロックの和訳の差し替えは `translations.json`(`[{"english": 完全一致英文, "japanese": 和訳}]`)を転送 → `translations_result.json` の applied 件数で検証。端末内Apple翻訳は和訳が無いブロックだけのフォールバック
+- 和訳(文ごとの交互表示): 音読タブは英文1文↔和訳1文を交互に出す。`build_sentence_pairs.py passages.json [manual_pairs.json]` で `sentence_pairs.json` を生成し devicectl 転送(結果は `sentence_pairs_result.json`)。英文は文末・和訳は句点で分割し文数一致なら自動ペア。会話文など文数がずれるブロックは `local-data/sentence-pairs/manual_pairs.json`(gitignore、`{ハッシュ: [[英文,和訳],...]}`)に手動ペアを追記(未指定だとツールが一覧を出してエラー終了)。ツールが英文連結の語列の一致を検証するので単語長押しの位置はずれない
 - ビルド/インストール手順とデバイスIDはメモリ `iphone-deploy-procedure` を参照

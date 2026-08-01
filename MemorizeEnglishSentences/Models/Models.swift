@@ -148,6 +148,23 @@ final class WordSenseCacheEntry {
     }
 }
 
+/// ブロックを「英文1文↔和訳1文」のペアに分けたデータ(Claude Code が事前生成)。
+/// 音読タブで英文と和訳を文ごとに交互表示するのに使う。
+@Model
+final class SentencePairCacheEntry {
+    /// ブロック英文のハッシュ(sha256(englishText.trim).hex[:16])
+    @Attribute(.unique) var key: String
+    /// [["英文","和訳"], ...] を JSON エンコードした文字列
+    var pairsJSON: String
+    var updatedAt: Date
+
+    init(key: String, pairsJSON: String, updatedAt: Date = .now) {
+        self.key = key
+        self.pairsJSON = pairsJSON
+        self.updatedAt = updatedAt
+    }
+}
+
 @Model
 final class RecallAttempt {
     var passage: Passage?

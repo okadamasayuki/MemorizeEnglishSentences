@@ -118,6 +118,34 @@ enum WordSenseLookup {
     }
 }
 
+/// 英文↔和訳の文ごとのペア(Claude Code が事前生成)の解決。
+@MainActor
+enum SentencePairLookup {
+    struct Pair: Hashable {
+        let en: String
+        let ja: String
+    }
+
+    /// ブロック英文のハッシュをキーに、文ごとのペアを引く。無ければ nil。
+    static func cached(blockText: String, modelContext: ModelContext) -> [Pair]? {
+        let normalized = blockText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let digest = SHA256.hash(data: Data(normalized.utf8))
+        let key = digest.map { String(format: "%02x", $0) }.joined().prefix(16)
+        let target = String(key)
+        let descriptor = FetchDescriptor<SentencePairCacheEntry>(
+            predicate: #Predicate { $0.key == target }
+        )
+        guard let entry = try? modelContext.fetch(descriptor).first,
+              let data = entry.pairsJSON.data(using: .utf8),
+              let raw = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] else { return nil }
+        let pairs = raw.compactMap { dict -> Pair? in
+            guard let en = dict["en"], let ja = dict["ja"] else { return nil }
+            return Pair(en: en, ja: ja)
+        }
+        return pairs.isEmpty ? nil : pairs
+    }
+}
+
 /// 単語翻訳のリクエストを、常駐している翻訳セッションへ流し込むための橋渡し。
 /// (タップごとに invalidate() でセッションを作り直す方式は、シート表示と
 ///  タイミングが重なる初回タップで再実行されないことがあるため)

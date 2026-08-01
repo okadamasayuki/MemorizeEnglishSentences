@@ -120,6 +120,44 @@ enum MacBridge {
         }
     }
 
+    /// Claude Code が置いた sentence_pairs.json(英文↔和訳の文ごとのペア)を取り込む。
+    /// 形式: [{"key": ブロック英文ハッシュ, "pairs": [{"en": 英文, "ja": 和訳}]}]
+    /// 既存キーは上書き更新する。適用後はファイルを削除し、結果を sentence_pairs_result.json に書き出す。
+    static func importSentencePairsIfAny(context: ModelContext) {
+        let url = documents.appendingPathComponent("sentence_pairs.json")
+        guard let data = try? Data(contentsOf: url),
+              let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return }
+
+        let descriptor = FetchDescriptor<SentencePairCacheEntry>()
+        var existing: [String: SentencePairCacheEntry] = [:]
+        for entry in (try? context.fetch(descriptor)) ?? [] { existing[entry.key] = entry }
+
+        var imported = 0
+        for item in list {
+            guard let key = item["key"] as? String,
+                  let pairs = item["pairs"] as? [[String: String]],
+                  let json = try? JSONSerialization.data(withJSONObject: pairs),
+                  let jsonString = String(data: json, encoding: .utf8) else { continue }
+            if let entry = existing[key] {
+                if entry.pairsJSON != jsonString {
+                    entry.pairsJSON = jsonString
+                    entry.updatedAt = .now
+                    imported += 1
+                }
+            } else {
+                context.insert(SentencePairCacheEntry(key: key, pairsJSON: jsonString))
+                imported += 1
+            }
+        }
+        try? context.save()
+        try? FileManager.default.removeItem(at: url)
+
+        let result: [String: Int] = ["imported": imported, "totalInFile": list.count]
+        if let out = try? JSONSerialization.data(withJSONObject: result) {
+            try? out.write(to: documents.appendingPathComponent("sentence_pairs_result.json"))
+        }
+    }
+
     /// Claude Code が置いた translations.json(ブロック全文の和訳)を取り込む。
     /// 形式: [{"english": 英文(完全一致), "japanese": 和訳}]
     /// 既存の和訳(Apple翻訳製など)も上書きする。適用後はファイルを削除し、
