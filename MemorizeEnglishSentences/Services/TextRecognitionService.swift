@@ -59,8 +59,10 @@ enum TextRecognitionService {
         let candidates: [Line] = observations.compactMap { observation in
             guard let candidate = observation.topCandidates(1).first,
                   candidate.confidence >= 0.3 else { return nil }
-            let text = candidate.string.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty, isMostlyEnglish(text) else { return nil }
+            var text = candidate.string.trimmingCharacters(in: .whitespacesAndNewlines)
+            // 教材の「N Content Block ●番号」ラベルとバッジの文字化けを取り除く
+            text = stripBlockLabel(text)
+            guard !text.isEmpty, isMostlyEnglish(text), !isJunkLine(text) else { return nil }
             return Line(text: text, box: observation.boundingBox)
         }
         guard !candidates.isEmpty else { return "" }
@@ -113,6 +115,35 @@ enum TextRecognitionService {
             .map { $0.joined(separator: " ") }
             .joined(separator: "\n\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// トークンが英単語として素直か(英字とアポストロフィのみ、先頭が英字)
+    private static func isCleanWord(_ token: Substring) -> Bool {
+        guard let first = token.first, first.isLetter, first.isASCII else { return false }
+        return token.allSatisfy { ($0.isLetter && $0.isASCII) || $0 == "'" || $0 == "," || $0 == "." }
+    }
+
+    /// 「N Content Block ●番号(文字化け)」というラベル部分を取り除く。
+    /// ラベルの後ろに本文が続く場合は本文だけを残し、ラベルだけの行は空にする。
+    private static func stripBlockLabel(_ text: String) -> String {
+        guard let range = text.range(of: "Content Block", options: .caseInsensitive) else {
+            return text
+        }
+        // "Content Block" 以降を、最初のまともな英単語が来るまで読み飛ばす
+        let after = text[range.upperBound...]
+        let tokens = after.split(whereSeparator: { $0.isWhitespace })
+        guard let startIndex = tokens.firstIndex(where: isCleanWord) else {
+            return ""  // ラベルとバッジだけの行
+        }
+        return tokens[startIndex...].joined(separator: " ")
+    }
+
+    /// 記号や数字ばかりで英単語がほとんどない、ノイズだけの行か
+    private static func isJunkLine(_ text: String) -> Bool {
+        let words = text.split(whereSeparator: { $0.isWhitespace })
+        let cleanWords = words.filter { isCleanWord($0) && $0.count >= 2 }
+        // まともな英単語が 1 つもなければノイズ
+        return cleanWords.isEmpty
     }
 
     /// 英文の行かどうか(ASCII 英字が過半数を占めるか)
