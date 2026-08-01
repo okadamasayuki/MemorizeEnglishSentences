@@ -43,6 +43,64 @@ enum MacBridge {
         }
     }
 
+    /// Claude Code が置いた import_passages.json を音読タブへ取り込む。
+    /// 形式: [{"title": タイトル, "blocks": [{"english": 英文, "japanese": 和訳(省略可)}]}]
+    /// 同じタイトルの音読の文章が既にあれば重複させない。適用後はファイルを削除する。
+    static func importPassagesIfAny(context: ModelContext) {
+        let url = documents.appendingPathComponent("import_passages.json")
+        guard let data = try? Data(contentsOf: url),
+              let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return }
+
+        let descriptor = FetchDescriptor<Passage>()
+        let existing = (try? context.fetch(descriptor)) ?? []
+        let existingTitles = Set(existing.filter { $0.purpose == .reading }.map(\.title))
+
+        // 一覧(作成日の新しい順)にファイルの並びどおり上から表示されるよう createdAt をずらす
+        let base = Date.now
+        for (offset, item) in list.enumerated() {
+            guard let title = item["title"] as? String,
+                  let blocks = item["blocks"] as? [[String: Any]],
+                  !existingTitles.contains(title) else { continue }
+            let passage = Passage(title: title, createdAt: base.addingTimeInterval(-Double(offset)))
+            passage.purpose = .reading
+            context.insert(passage)
+            for (index, blockItem) in blocks.enumerated() {
+                guard let english = blockItem["english"] as? String, !english.isEmpty else { continue }
+                let block = Block(
+                    index: index,
+                    englishText: english,
+                    japaneseText: blockItem["japanese"] as? String
+                )
+                block.passage = passage
+                context.insert(block)
+            }
+        }
+        try? context.save()
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Claude Code が置いた delete_passages.json を適用する。
+    /// 形式: [ブロック英文の先頭文字列] — 先頭一致するブロックを含む音読の文章を削除する。
+    /// 適用後はファイルを削除する。
+    static func applyDeletionsIfAny(context: ModelContext) {
+        let url = documents.appendingPathComponent("delete_passages.json")
+        guard let data = try? Data(contentsOf: url),
+              let prefixes = try? JSONSerialization.jsonObject(with: data) as? [String],
+              !prefixes.isEmpty else { return }
+
+        let descriptor = FetchDescriptor<Passage>()
+        if let passages = try? context.fetch(descriptor) {
+            for passage in passages where passage.purpose == .reading {
+                let hit = passage.blocks.contains { block in
+                    prefixes.contains { block.englishText.hasPrefix($0) }
+                }
+                if hit { context.delete(passage) }
+            }
+            try? context.save()
+        }
+        try? FileManager.default.removeItem(at: url)
+    }
+
     /// Claude Code が置いた corrections.json を取り込む。
     /// 形式: [{"old": 修正前の英文, "new": 修正後の英文}]
     /// 適用後はファイルを削除する。
@@ -57,6 +115,8 @@ enum MacBridge {
             guard let old = correction["old"], let new = correction["new"], old != new else { continue }
             for block in blocks where block.englishText == old {
                 block.englishText = new
+                // 修正前の英文から作った和訳は古くなるので、消して再翻訳させる
+                block.japaneseText = nil
             }
         }
         try? context.save()

@@ -337,6 +337,21 @@ enum SampleData {
         UserDefaults.standard.set(true, forKey: key)
     }
 
+    /// 音読タブに残っていた既存の例文を一度だけ空にする(タブ自体は残す)。
+    /// (splitReadingAndRecallIfNeeded の後に呼ぶこと。暗記側の文章には影響しない)
+    static func removeReadingPassagesIfNeeded(context: ModelContext) {
+        let key = "didClearReadingPassages_v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let descriptor = FetchDescriptor<Passage>()
+        if let passages = try? context.fetch(descriptor) {
+            for passage in passages where passage.purpose == .reading {
+                context.delete(passage)
+            }
+            try? context.save()
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     /// 音読と暗記のデータを独立させたときの一度きりの移行処理。
     /// それまで両タブで共有していた文章を暗記側にも複製し、暗記の記録は暗記側へ移す。
     static func splitReadingAndRecallIfNeeded(context: ModelContext) {
