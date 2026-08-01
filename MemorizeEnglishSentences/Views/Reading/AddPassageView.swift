@@ -191,7 +191,7 @@ struct AddPassageView: View {
         .padding()
         .sheet(isPresented: $showCamera) {
             CameraPicker { image in
-                Task { await recognize(image) }
+                Task { await recognizeImage(image) }
             }
             .ignoresSafeArea()
         }
@@ -199,6 +199,21 @@ struct AddPassageView: View {
             guard !photoItems.isEmpty else { return }
             let items = photoItems
             Task { await recognizeAll(items) }
+        }
+    }
+
+    /// カメラ 1 枚撮影分を OCR してエディタへ追記する
+    private func recognizeImage(_ image: UIImage) async {
+        ocrError = nil
+        isRecognizing = true
+        defer { isRecognizing = false }
+        do {
+            let recognized = try await TextRecognitionService.recognizeEnglishText(in: image)
+            if !recognized.isEmpty {
+                text = text.isEmpty ? recognized : text + "\n\n" + recognized
+            }
+        } catch {
+            ocrError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 
