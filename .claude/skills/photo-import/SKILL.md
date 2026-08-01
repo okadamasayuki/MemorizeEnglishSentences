@@ -47,5 +47,5 @@ description: 書籍ページのスクショ/写真から英文を抽出してア
 - 取り込み: `import_passages.json`(`make_import_json.py` で生成)を `devicectl device copy to ... --destination "Documents/import_passages.json" --domain-type appDataContainer --domain-identifier com.okadamasayuki.MemorizeEnglishSentences` で転送 → アプリ起動で取り込み(タイトル重複はスキップ、取り込み後ファイル自動削除)
 - 修正: `corrections.json`(`[{"old","new"}]`、英文完全一致で置換・和訳は自動リセット→再翻訳)
 - 削除: `delete_passages.json`(ブロック英文の先頭一致で文章ごと削除)
-- 和訳: 入れない。音読タブ表示時に端末内Apple翻訳が一括生成・保存する
+- 和訳(全文): **Claude Code が全ブロックの和訳を自分で書き**、`ja_translations.tsv`(scratchpad、`sha256(英文.strip()).hex[:16]\t和訳`)に置いて `make_import_json.py` で import_passages.json に埋め込む。自然で簡潔な訳にし、原文の論旨(賛成/反対の立場)を保つ。既存ブロックの和訳の差し替えは `translations.json`(`[{"english": 完全一致英文, "japanese": 和訳}]`)を転送 → `translations_result.json` の applied 件数で検証。端末内Apple翻訳は和訳が無いブロックだけのフォールバック
 - ビルド/インストール手順とデバイスIDはメモリ `iphone-deploy-procedure` を参照

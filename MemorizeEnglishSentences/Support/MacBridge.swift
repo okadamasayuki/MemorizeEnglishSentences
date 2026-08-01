@@ -120,6 +120,37 @@ enum MacBridge {
         }
     }
 
+    /// Claude Code が置いた translations.json(ブロック全文の和訳)を取り込む。
+    /// 形式: [{"english": 英文(完全一致), "japanese": 和訳}]
+    /// 既存の和訳(Apple翻訳製など)も上書きする。適用後はファイルを削除し、
+    /// 結果を translations_result.json に書き出す。
+    static func applyTranslationsIfAny(context: ModelContext) {
+        let url = documents.appendingPathComponent("translations.json")
+        guard let data = try? Data(contentsOf: url),
+              let list = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] else { return }
+
+        let descriptor = FetchDescriptor<Block>()
+        let blocks = (try? context.fetch(descriptor)) ?? []
+        var byEnglish: [String: [Block]] = [:]
+        for block in blocks { byEnglish[block.englishText, default: []].append(block) }
+
+        var applied = 0
+        for item in list {
+            guard let english = item["english"], let japanese = item["japanese"], !japanese.isEmpty else { continue }
+            for block in byEnglish[english] ?? [] where block.japaneseText != japanese {
+                block.japaneseText = japanese
+                applied += 1
+            }
+        }
+        try? context.save()
+        try? FileManager.default.removeItem(at: url)
+
+        let result: [String: Int] = ["applied": applied, "totalInFile": list.count]
+        if let out = try? JSONSerialization.data(withJSONObject: result) {
+            try? out.write(to: documents.appendingPathComponent("translations_result.json"))
+        }
+    }
+
     /// Claude Code が置いた delete_passages.json を適用する。
     /// 形式: [ブロック英文の先頭文字列] — 先頭一致するブロックを含む音読の文章を削除する。
     /// 適用後はファイルを削除する。
