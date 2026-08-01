@@ -40,12 +40,6 @@ struct WordPopupView: View {
                 }
             }
 
-            if meaning.isContextual {
-                Text("この文での意味")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
             // 音声が聞けない場面用の読み方(カタカナ)
             let pronunciation = KatakanaPronunciation.katakana(for: word)
             if !pronunciation.isEmpty {
