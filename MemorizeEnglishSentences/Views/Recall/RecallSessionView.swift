@@ -112,14 +112,14 @@ struct RecallSessionView: View {
                     showAnswer.toggle()
                 }
             }
-            // 左右スワイプで前後の文章へ移動(→スワイプ = 次へ)
+            // 左右スワイプで前後の文章へ移動(←スワイプ = 次へ)
             .simultaneousGesture(
                 DragGesture(minimumDistance: 40)
                     .onEnded { value in
                         guard abs(value.translation.width) > 60,
                               abs(value.translation.width) > abs(value.translation.height) * 1.5
                         else { return }
-                        move(value.translation.width > 0 ? 1 : -1)
+                        move(value.translation.width > 0 ? -1 : 1)
                     }
             )
 
