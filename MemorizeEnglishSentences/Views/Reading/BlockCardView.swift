@@ -11,6 +11,8 @@ struct BlockCardView: View {
     let onWordTap: (String, Int) -> Void
     /// 英文↔和訳の文ごとのペア(nil ならブロック全体を1文として扱う)
     var sentencePairs: [SentencePairLookup.Pair]? = nil
+    /// 元スクショの表示(対応する画像があるときだけ渡す)
+    var onShowSource: (() -> Void)? = nil
 
     /// ブロック全体のトークン(単語長押しの出現番号はここを基準に数える)
     private var tokens: [WordToken] {
@@ -69,11 +71,25 @@ struct BlockCardView: View {
                 }
             }
 
-            if block.isMarked {
-                Image(systemName: "bookmark.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.orange)
-                    .frame(width: 24, height: 24)
+            VStack(spacing: 10) {
+                // 元スクショを開いて、読み取りが正しいかすぐ確認できる
+                if let onShowSource {
+                    Button {
+                        onShowSource()
+                    } label: {
+                        Image(systemName: "photo")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.accentColor)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                if block.isMarked {
+                    Image(systemName: "bookmark.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                        .frame(width: 24, height: 24)
+                }
             }
         }
         .padding()

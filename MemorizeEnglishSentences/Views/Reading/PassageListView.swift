@@ -21,6 +21,8 @@ struct PassageListView: View {
     @State private var isSelecting = false
     @State private var selection = Set<PersistentIdentifier>()
     @State private var scrollProxy: ScrollViewProxy?
+    /// 表示中の元スクショ(nil = 非表示)
+    @State private var sourceImage: IdentifiableImage?
 
     private var blocks: [Block] {
         passages.flatMap { $0.orderedBlocks }
@@ -125,6 +127,9 @@ struct PassageListView: View {
             .sheet(item: $selectedWord) { selected in
                 WordPopupView(word: selected.word, meaning: wordMeaning)
             }
+            .sheet(item: $sourceImage) { item in
+                SourceImageView(image: item.image)
+            }
             // 単語の翻訳(常駐セッション 1 本に、タップされた単語をストリームで流し込む)
             .translationTask(wordConfiguration) { session in
                 // ダミー翻訳でセッションの生存確認。
@@ -193,7 +198,10 @@ struct PassageListView: View {
                 onWordTap: { word, occurrence in
                     showWord(word, occurrence: occurrence, sentenceContext: block.englishText)
                 },
-                sentencePairs: SentencePairLookup.cached(blockText: block.englishText, modelContext: context)
+                sentencePairs: SentencePairLookup.cached(blockText: block.englishText, modelContext: context),
+                onShowSource: PageImageStore.hasImage(forBlockText: block.englishText)
+                    ? { sourceImage = PageImageStore.image(forBlockText: block.englishText).map(IdentifiableImage.init) }
+                    : nil
             )
             .allowsHitTesting(!isSelecting)
 
