@@ -223,10 +223,9 @@ struct RecallSessionView: View {
                     Spacer()
                 }
 
-                // 歩きながらでも読みやすいよう、本文はすべて大きめの文字にする
-                Text(page.japaneseFullText.isEmpty ? "(和訳がありません — 登録し直して翻訳してください)" : page.japaneseFullText)
-                    .font(.title3)
-                    .lineSpacing(6)
+                // 歩きながらでも読みやすいよう、本文はすべて大きめの文字にする。
+                // 日本語が変なところで折り返されないよう行末まで詰めて表示する
+                NaturalWrapText(text: page.japaneseFullText.isEmpty ? "(和訳がありません — 登録し直して翻訳してください)" : page.japaneseFullText)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if showHint {
