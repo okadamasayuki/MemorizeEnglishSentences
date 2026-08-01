@@ -15,9 +15,6 @@ struct RootTabView: View {
             Tab("単語", systemImage: "rectangle.stack.fill") {
                 VocabListView()
             }
-            Tab("設定", systemImage: "gearshape.fill") {
-                SettingsView()
-            }
         }
         .task {
             SampleData.seedIfNeeded(context: context)

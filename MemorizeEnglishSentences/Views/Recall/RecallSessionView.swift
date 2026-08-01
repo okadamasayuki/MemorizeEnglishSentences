@@ -352,26 +352,14 @@ struct RecallSessionView: View {
         token.display.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
     }
 
-    /// 単語の意味を表示。事前生成済みの「この文中での意味」を最優先し、
-    /// なければ APIキー設定時はその場で取得、それ以外は従来手段で解決する
+    /// 単語の意味を表示。Claude Code が事前生成した「この文中での意味」を最優先し、
+    /// キャッシュにない単語は従来手段(内蔵辞書 → キャッシュ → Apple 翻訳)で解決する
     private func showWord(_ word: String, occurrence: Int, sentenceContext: String) {
         wordMeaning.reset()
         selectedWord = SelectedWord(word: word)
 
         if let cached = WordSenseLookup.cached(word: word, occurrence: occurrence, blockText: sentenceContext, modelContext: context) {
             wordMeaning.apply(cached)
-            return
-        }
-        if ClaudeAPIService.isConfigured {
-            Task {
-                let sense = await WordSenseLookup.fetch(word: word, blockText: sentenceContext, modelContext: context)
-                guard selectedWord?.word == word else { return }
-                if let sense {
-                    wordMeaning.apply(sense)
-                } else {
-                    legacyLookup(word)
-                }
-            }
             return
         }
         legacyLookup(word)

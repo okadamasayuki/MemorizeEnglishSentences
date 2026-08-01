@@ -10,6 +10,12 @@ struct SelectedWord: Identifiable {
     let word: String
 }
 
+/// 文中での単語の意味(Claude Code が事前生成し端末キャッシュに投入する)
+struct WordSense {
+    let posJa: String
+    let meaningJa: String
+}
+
 /// 単語の意味データ。ポップアップ(シート)が直接監視する。
 /// (シートのコンテンツは最初の表示時に親の @State の更新を
 ///  取りこぼすことがあるため、ObservableObject で確実に反映させる)
@@ -19,20 +25,16 @@ final class WordMeaningModel: ObservableObject {
     @Published var failed = false
     /// この文中での品詞(文脈対応の意味のときだけ入る)
     @Published var pos: String?
-    /// 文脈に合わせた意味かどうか(Claude API 由来)
-    @Published var isContextual = false
 
     func reset() {
         japanese = nil
         failed = false
         pos = nil
-        isContextual = false
     }
 
     func apply(_ sense: WordSense) {
         japanese = sense.meaningJa
         pos = sense.posJa
-        isContextual = true
     }
 }
 
@@ -82,23 +84,10 @@ enum EnglishFunctionWords {
     ]
 }
 
-/// 文脈つき単語意味の解決(Claude API + キャッシュ)。
-/// キャッシュはブロック英文のハッシュで引くため、同じブロック内なら再課金なしで即表示できる
+/// 文脈つき単語意味の解決。Claude Code が事前生成した意味を、
+/// ブロック英文のハッシュをキーにして端末キャッシュから引く(通信なし・オフライン)。
 @MainActor
 enum WordSenseLookup {
-    /// 単語を含む文をテキストから取り出す(見つからなければ全文を使う)
-    static func sentence(containing word: String, in text: String) -> String {
-        let sentences = TextSplitter.split(text)
-        let target = word.lowercased()
-        for sentence in sentences {
-            let words = WordTokenizer.tokenize(sentence).map(\.normalized)
-            if words.contains(target) {
-                return sentence
-            }
-        }
-        return text
-    }
-
     static func cacheKey(word: String, blockText: String) -> String {
         let normalized = blockText.trimmingCharacters(in: .whitespacesAndNewlines)
         let digest = SHA256.hash(data: Data(normalized.utf8))
@@ -126,23 +115,6 @@ enum WordSenseLookup {
         )
         guard let entry = try? modelContext.fetch(descriptor).first else { return nil }
         return WordSense(posJa: entry.posJa, meaningJa: entry.meaningJa)
-    }
-
-    /// API から取得してキャッシュする。失敗したら nil(呼び出し側が従来手段へフォールバック)
-    static func fetch(word: String, blockText: String, modelContext: ModelContext) async -> WordSense? {
-        let sentence = sentence(containing: word, in: blockText)
-        guard let sense = try? await ClaudeAPIService.wordSense(word: word, sentence: sentence) else {
-            return nil
-        }
-        let entry = WordSenseCacheEntry(
-            key: cacheKey(word: word, blockText: blockText),
-            word: word,
-            posJa: sense.posJa,
-            meaningJa: sense.meaningJa
-        )
-        modelContext.insert(entry)
-        try? modelContext.save()
-        return sense
     }
 }
 

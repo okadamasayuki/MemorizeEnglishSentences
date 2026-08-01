@@ -252,8 +252,8 @@ struct PassageListView: View {
         withAnimation { issuesByBlock = result }
     }
 
-    /// 単語の意味を表示。APIキー設定時は「その文の中での意味」を優先し、
-    /// 未設定・失敗時は従来の内蔵辞書 → キャッシュ → Apple 翻訳で解決する
+    /// 単語の意味を表示。Claude Code が事前生成した「その文中での意味」を最優先し、
+    /// キャッシュにない単語は内蔵辞書 → キャッシュ → Apple 翻訳で解決する
     private func showWord(_ word: String, occurrence: Int, sentenceContext: String) {
         wordMeaning.reset()
         selectedWord = SelectedWord(word: word)
@@ -261,19 +261,6 @@ struct PassageListView: View {
         // 事前生成済みの「この文中での意味」があれば最優先(無料・オフライン)
         if let cached = WordSenseLookup.cached(word: word, occurrence: occurrence, blockText: sentenceContext, modelContext: context) {
             wordMeaning.apply(cached)
-            return
-        }
-        // キャッシュにない単語は、APIキー設定時のみその場で取得
-        if ClaudeAPIService.isConfigured {
-            Task {
-                let sense = await WordSenseLookup.fetch(word: word, blockText: sentenceContext, modelContext: context)
-                guard selectedWord?.word == word else { return }
-                if let sense {
-                    wordMeaning.apply(sense)
-                } else {
-                    legacyLookup(word)
-                }
-            }
             return
         }
         legacyLookup(word)
