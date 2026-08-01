@@ -237,13 +237,14 @@ struct RecallSessionView: View {
 
                 if showAnswer {
                     // 単語を長押しすると和訳を表示(無音。発音はシート内のボタンで再生)
+                    let tokens = WordTokenizer.tokenize(page.englishFullText)
                     FlowLayout(spacing: 6, lineSpacing: 10) {
-                        ForEach(WordTokenizer.tokenize(page.englishFullText)) { token in
+                        ForEach(tokens) { token in
                             Text(token.display)
                                 .font(.title3)
                                 .onLongPressGesture {
                                     let word = token.normalized.isEmpty ? token.display : token.normalized
-                                    showWord(word, sentenceContext: page.englishFullText)
+                                    showWord(word, occurrence: WordTokenizer.occurrence(of: token, in: tokens), sentenceContext: page.englishFullText)
                                 }
                         }
                     }
@@ -353,11 +354,11 @@ struct RecallSessionView: View {
 
     /// 単語の意味を表示。事前生成済みの「この文中での意味」を最優先し、
     /// なければ APIキー設定時はその場で取得、それ以外は従来手段で解決する
-    private func showWord(_ word: String, sentenceContext: String) {
+    private func showWord(_ word: String, occurrence: Int, sentenceContext: String) {
         wordMeaning.reset()
         selectedWord = SelectedWord(word: word)
 
-        if let cached = WordSenseLookup.cached(word: word, blockText: sentenceContext, modelContext: context) {
+        if let cached = WordSenseLookup.cached(word: word, occurrence: occurrence, blockText: sentenceContext, modelContext: context) {
             wordMeaning.apply(cached)
             return
         }

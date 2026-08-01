@@ -36,7 +36,7 @@ description: 書籍ページのスクショ/写真から英文を抽出してア
 
 1. `python3 word_inventory.py parsed.json ../../local-data/word-glosses/base_gloss.json` — 対象語を抽出し、基礎辞書にない新出語を `new_words.txt` に出す(トークナイズはアプリの WordTokenizer.normalize+機能語除外と完全一致)
 2. 新出語に品詞・訳語(目安15文字以内の簡潔な訳語)を割り当て、`local-data/word-glosses/base_gloss.json` に追記する。訳語はこの教材での使われ方に合わせる
-3. **文脈レビュー(必須・全ブロック)**: `python3 preview_senses.py words_by_block.json ../../local-data/word-glosses/base_gloss.json ../../local-data/word-glosses/overrides.tsv` の出力を通読し、**既知語も含めて**新しい文章の文脈に訳語が合っているかを1ブロックずつ確認する。基礎辞書は初期値にすぎない — 前回の訳をそのまま流用せず、文脈に合わない語(多義語: run/right/left/work/train/matter 等はとくに注意)は `local-data/word-glosses/overrides.tsv` に「ブロックハッシュ\t単語\t品詞\t訳語」で訳し分けを追記する
+3. **文脈レビュー(必須・全ブロック)**: `python3 preview_senses.py words_by_block.json ../../local-data/word-glosses/base_gloss.json ../../local-data/word-glosses/overrides.tsv` の出力を通読し、**既知語も含めて**新しい文章の文脈に訳語が合っているかを1ブロックずつ確認する。基礎辞書は初期値にすぎない — 前回の訳をそのまま流用せず、文脈に合わない語(多義語: run/right/left/work/train/matter 等はとくに注意)は `local-data/word-glosses/overrides.tsv` に「ブロックハッシュ\t単語\t品詞\t訳語」で訳し分けを追記する。**同じ単語が1ブロック内で別の意味で2回以上使われている場合**(例: government support ... enough to support)は、単語欄を「単語#出現番号」(0始まり、例: `support#1`)にして出現ごとに別訳を付ける。ブロック内の重複語は `同一ブロック内で2回以上出る内容語を列挙するスクリプト` で機械抽出してから意味のズレを目視確認すると漏れない
 4. `python3 build_word_senses.py words_by_block.json ../../local-data/word-glosses/base_gloss.json ../../local-data/word-glosses/overrides.tsv` — 網羅検証つきで `word_senses.json` を生成
 5. `word_senses.json` を `Documents/word_senses.json` へ devicectl copy → アプリ起動で取り込み → `word_senses_result.json` を取得して imported 件数を検証
 

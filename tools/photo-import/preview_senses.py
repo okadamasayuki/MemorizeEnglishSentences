@@ -33,6 +33,10 @@ def main():
                 parts.append(f"{w}={base[w]['meaning']}")
             else:
                 parts.append(f"{w}=【未収録】")
+        # 出現番号つきオーバーライド(word#N: N回目の出現だけ別訳)も表示する
+        for (h, w), (pos, mean) in overrides.items():
+            if h == b['hash'] and '#' in w:
+                parts.append(f"{w}={mean}※")
         print('  ' + ' / '.join(parts))
         print()
 

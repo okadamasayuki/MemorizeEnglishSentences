@@ -8,7 +8,8 @@ struct BlockCardView: View {
     let block: Block
     let isExpanded: Bool
     let onToggle: () -> Void
-    let onWordTap: (String) -> Void
+    /// 長押しされた単語と、ブロック内で同じ単語の何回目の出現か(0始まり)
+    let onWordTap: (String, Int) -> Void
     /// 英文チェックで不自然と判定された語(オレンジで表示)
     var suspiciousWords: Set<String> = []
     /// 英文チェックの指摘(文頭の小文字・句読点など、単語に紐づかないもの)
@@ -60,7 +61,7 @@ struct BlockCardView: View {
                             // 長押しで単語の意味を表示(タップはカードの和訳切り替えに回す)
                             .onLongPressGesture {
                                 let word = token.normalized.isEmpty ? token.display : token.normalized
-                                onWordTap(word)
+                                onWordTap(word, WordTokenizer.occurrence(of: token, in: tokens))
                             }
                     }
                 }

@@ -107,7 +107,20 @@ enum WordSenseLookup {
     }
 
     static func cached(word: String, blockText: String, modelContext: ModelContext) -> WordSense? {
-        let key = cacheKey(word: word, blockText: blockText)
+        fetchEntry(key: cacheKey(word: word, blockText: blockText), modelContext: modelContext)
+    }
+
+    /// 同じ単語がブロック内で別の意味で使われる場合に備え、
+    /// 「単語#出現番号」のキーを先に引き、なければブロック共通のキーへフォールバックする
+    static func cached(word: String, occurrence: Int, blockText: String, modelContext: ModelContext) -> WordSense? {
+        let occurrenceKey = cacheKey(word: "\(word.lowercased())#\(occurrence)", blockText: blockText)
+        if let sense = fetchEntry(key: occurrenceKey, modelContext: modelContext) {
+            return sense
+        }
+        return cached(word: word, blockText: blockText, modelContext: modelContext)
+    }
+
+    private static func fetchEntry(key: String, modelContext: ModelContext) -> WordSense? {
         let descriptor = FetchDescriptor<WordSenseCacheEntry>(
             predicate: #Predicate { $0.key == key }
         )

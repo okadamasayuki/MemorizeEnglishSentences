@@ -6,6 +6,8 @@
 #   python3 build_word_senses.py words_by_block.json base_gloss.json [overrides.tsv]
 #     base_gloss.json: {"word": {"pos": 品詞, "meaning": 訳語}, ...}
 #     overrides.tsv:   ブロックハッシュ<TAB>単語<TAB>品詞<TAB>訳語(文脈で訳が変わる語のみ)
+#       単語は「word#N」形式も可(N=ブロック内でのその単語の出現番号、0始まり)。
+#       同じ単語がブロック内で別の意味で使われる場合に、N回目の出現だけ訳を変えられる。
 import json
 import sys
 
@@ -22,9 +24,9 @@ def main():
             h, w, pos, mean = line.split('\t')
             overrides[(h, w)] = (pos, mean)
 
-    # オーバーライドの (hash, word) が実在するか
+    # オーバーライドの (hash, word) が実在するか(word#N はベースの単語で確認)
     pairs = {(b['hash'], w) for b in blocks for w in b['words']}
-    bad = [k for k in overrides if k not in pairs]
+    bad = [k for k in overrides if (k[0], k[1].split('#')[0]) not in pairs]
     if bad:
         print('ERROR: invalid overrides (hash, word):', bad, file=sys.stderr)
         sys.exit(1)
@@ -40,6 +42,11 @@ def main():
                 missing.append(w)
                 continue
             out.append({'key': f"{w}|{b['hash']}", 'word': w, 'pos': pos, 'meaning': mean})
+
+    # 出現番号つきオーバーライド(word#N)は、ブロック共通の訳とは別のエントリとして追加する
+    for (h, w), (pos, mean) in overrides.items():
+        if '#' in w:
+            out.append({'key': f"{w}|{h}", 'word': w.split('#')[0], 'pos': pos, 'meaning': mean})
 
     if missing:
         print('ERROR: words without gloss:', sorted(set(missing)), file=sys.stderr)

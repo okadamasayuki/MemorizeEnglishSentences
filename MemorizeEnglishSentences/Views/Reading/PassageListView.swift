@@ -203,8 +203,8 @@ struct PassageListView: View {
                 block: block,
                 isExpanded: expandedBlockIDs.contains(block.persistentModelID),
                 onToggle: { toggle(block) },
-                onWordTap: { word in
-                    showWord(word, sentenceContext: block.englishText)
+                onWordTap: { word, occurrence in
+                    showWord(word, occurrence: occurrence, sentenceContext: block.englishText)
                 },
                 suspiciousWords: issuesByBlock?[block.persistentModelID]?.suspiciousWords ?? [],
                 issueNotes: issuesByBlock?[block.persistentModelID]?.notes ?? []
@@ -254,12 +254,12 @@ struct PassageListView: View {
 
     /// 単語の意味を表示。APIキー設定時は「その文の中での意味」を優先し、
     /// 未設定・失敗時は従来の内蔵辞書 → キャッシュ → Apple 翻訳で解決する
-    private func showWord(_ word: String, sentenceContext: String) {
+    private func showWord(_ word: String, occurrence: Int, sentenceContext: String) {
         wordMeaning.reset()
         selectedWord = SelectedWord(word: word)
 
         // 事前生成済みの「この文中での意味」があれば最優先(無料・オフライン)
-        if let cached = WordSenseLookup.cached(word: word, blockText: sentenceContext, modelContext: context) {
+        if let cached = WordSenseLookup.cached(word: word, occurrence: occurrence, blockText: sentenceContext, modelContext: context) {
             wordMeaning.apply(cached)
             return
         }
