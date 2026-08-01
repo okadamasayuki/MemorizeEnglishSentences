@@ -88,16 +88,28 @@ enum MacBridge {
               let list = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] else { return }
 
         let descriptor = FetchDescriptor<WordSenseCacheEntry>()
-        let existing = Set(((try? context.fetch(descriptor)) ?? []).map(\.key))
+        var existing: [String: WordSenseCacheEntry] = [:]
+        for entry in (try? context.fetch(descriptor)) ?? [] {
+            existing[entry.key] = entry
+        }
         var imported = 0
         for item in list {
             guard let key = item["key"],
                   let word = item["word"],
                   let pos = item["pos"],
-                  let meaning = item["meaning"],
-                  !existing.contains(key) else { continue }
-            context.insert(WordSenseCacheEntry(key: key, word: word, posJa: pos, meaningJa: meaning))
-            imported += 1
+                  let meaning = item["meaning"] else { continue }
+            if let entry = existing[key] {
+                // 訳語の修正を反映できるよう、既存キーは上書き更新する
+                if entry.posJa != pos || entry.meaningJa != meaning {
+                    entry.posJa = pos
+                    entry.meaningJa = meaning
+                    entry.updatedAt = .now
+                    imported += 1
+                }
+            } else {
+                context.insert(WordSenseCacheEntry(key: key, word: word, posJa: pos, meaningJa: meaning))
+                imported += 1
+            }
         }
         try? context.save()
         try? FileManager.default.removeItem(at: url)
