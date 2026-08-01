@@ -21,6 +21,7 @@ enum KatakanaPronunciation {
     // MARK: - よく使う単語の辞書(規則変換より優先)
 
     private static let dictionary: [String: String] = [
+        "bear": "ベア", "heart": "ハート", "heard": "ハード",
         "the": "ザ", "a": "ア", "an": "アン",
         "i": "アイ", "you": "ユー", "he": "ヒー", "she": "シー", "we": "ウィー",
         "they": "ゼイ", "it": "イット", "me": "ミー", "us": "アス", "him": "ヒム",

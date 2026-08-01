@@ -309,6 +309,20 @@ enum SampleData {
         UserDefaults.standard.set(true, forKey: key)
     }
 
+    /// 壊れた単語キャッシュ(1 文字だけの訳など、単語単体の誤訳)を一度だけ掃除する
+    static func cleanupWordCacheIfNeeded(context: ModelContext) {
+        let key = "didCleanWordCache_v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let descriptor = FetchDescriptor<WordCacheEntry>()
+        if let entries = try? context.fetch(descriptor) {
+            for entry in entries where entry.japanese.count <= 1 {
+                context.delete(entry)
+            }
+            try? context.save()
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     /// ステータス機能導入時に「要復習」で入った既存データを一度だけ「普通」に揃える
     static func applyDefaultStatusIfNeeded(context: ModelContext) {
         let key = "didDefaultStatusToNormal"

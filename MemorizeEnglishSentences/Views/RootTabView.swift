@@ -22,6 +22,7 @@ struct RootTabView: View {
             SampleData.splitReadingAndRecallIfNeeded(context: context)
             SampleData.seedBookPhotosIfNeeded(context: context)
             VocabSeedData.seedIfNeeded(context: context)
+            SampleData.cleanupWordCacheIfNeeded(context: context)
             // Mac(Claude Code)からの英文修正を取り込み、最新の登録内容を書き出す
             MacBridge.applyCorrectionsIfAny(context: context)
             MacBridge.exportPassages(context: context)

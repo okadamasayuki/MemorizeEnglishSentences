@@ -66,6 +66,7 @@ enum BasicWordDictionary {
         "ask": "尋ねる・頼む", "answer": "答える", "call": "呼ぶ・電話する",
         "wait": "待つ", "let": "〜させる", "allow": "許す", "decide": "決める",
         "choose": "選ぶ", "agree": "同意する", "believe": "信じる", "mean": "意味する",
+        "bear": "耐える・(心に)抱く・熊", "bore": "退屈させる", "bind": "縛る",
         "matter": "重要である・問題", "create": "創り出す", "build": "建てる・築く",
         "break": "壊す・壊れる", "cut": "切る", "eat": "食べる", "drink": "飲む",
         "sleep": "眠る", "wake": "目覚める", "wear": "着る", "drive": "運転する",
