@@ -17,12 +17,30 @@ import glob
 import hashlib
 import json
 import os
-import subprocess
 import sys
+
+import numpy as np
+from PIL import Image, ImageFilter
 
 
 def H(t):
     return hashlib.sha256(t.strip().encode()).hexdigest()[:16]
+
+
+def trim_and_sharpen(path, thr=240, pad=16):
+    """上下左右の白い余白をトリミングし、鮮明化して返す(ネイティブ解像度のまま)。"""
+    img = Image.open(path).convert('RGB')
+    gray = np.asarray(img.convert('L'))
+    mask = gray < thr  # 白(≈255)でない=内容
+    rows = np.any(mask, axis=1)
+    cols = np.any(mask, axis=0)
+    ys = np.where(rows)[0]
+    xs = np.where(cols)[0]
+    if len(ys) and len(xs):
+        x0, x1 = max(0, xs[0] - pad), min(img.width, xs[-1] + pad)
+        y0, y1 = max(0, ys[0] - pad), min(img.height, ys[-1] + pad)
+        img = img.crop((x0, y0, x1, y1))
+    return img.filter(ImageFilter.UnsharpMask(radius=1.2, percent=90, threshold=2))
 
 
 def main():
@@ -60,13 +78,12 @@ def main():
 
     json.dump(manifest, open(os.path.join(out_dir, 'manifest.json'), 'w'), ensure_ascii=False)
 
-    # 使うページだけ 1400px 幅に縮小して jpeg 保存
+    # 使うページだけ、白余白をトリミング+鮮明化して高品質 jpeg 保存
     used = set(int(v) for v in manifest.values())
     for i in used:
         if i in page_src:
-            subprocess.run(['sips', '-s', 'format', 'jpeg', '-Z', '1400', page_src[i],
-                            '--out', os.path.join(out_dir, f'{i}.jpg')],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            trim_and_sharpen(page_src[i]).save(
+                os.path.join(out_dir, f'{i}.jpg'), 'JPEG', quality=90)
 
     print('manifest entries:', len(manifest), '/ page images:', len(used))
 
