@@ -46,8 +46,17 @@ def ocr_lines(ocr_bin, img):
         return []
 
 
+def _maxrun(mask):
+    best = run = 0
+    for v in mask:
+        run = run + 1 if v else 0
+        if run > best:
+            best = run
+    return best
+
+
 def box_crop(img, lines, sentence, thr=240, pad=10):
-    """一致した英文のボックス(例文)だけを切り出す。解説は含めない。"""
+    """一致した英文のボックス(例文)を、上下の枠線込みで切り出す。解説は含めない。"""
     w, h = img.size
     sw = words(sentence)
     # 一致した英文の単語を多く含む行=ボックスの本文行
@@ -64,12 +73,30 @@ def box_crop(img, lines, sentence, thr=240, pad=10):
             grp.append(cur)
         else:
             break
-    y0 = max(0.0, grp[0]['y'] - 0.018)
-    y1 = min(1.0, grp[-1]['y'] + grp[-1]['h'] + 0.022)
-    band = img.crop((0, int(y0 * h), w, int(y1 * h)))
-    g = np.asarray(band.convert('L'))
-    xs = np.where(np.any(g < thr, axis=0))[0]
-    ys = np.where(np.any(g < thr, axis=1))[0]
+    ttop = int(grp[0]['y'] * h)
+    tbot = int((grp[-1]['y'] + grp[-1]['h']) * h)
+    g = np.asarray(img.convert('L'))
+
+    def is_border(r):  # 幅の 55% 以上が連続して暗い行=ボックスの横罫(枠)
+        return _maxrun(g[r] < 235) > 0.55 * w
+
+    # 本文の下→最初の横罫線(枠下端)まで含める。見つからなければ小さめ余白。
+    y1 = min(h, tbot + int(0.030 * h))
+    for r in range(tbot + 3, min(h, tbot + int(0.22 * h))):
+        if is_border(r):
+            y1 = min(h, r + 10)
+            break
+    # 本文の上→最初の横罫線(枠上端)まで含める。
+    y0 = max(0, ttop - int(0.030 * h))
+    for r in range(ttop - 3, max(0, ttop - int(0.22 * h)), -1):
+        if is_border(r):
+            y0 = max(0, r - 10)
+            break
+
+    band = img.crop((0, y0, w, y1))
+    gb = np.asarray(band.convert('L'))
+    xs = np.where(np.any(gb < thr, axis=0))[0]
+    ys = np.where(np.any(gb < thr, axis=1))[0]
     if len(xs) and len(ys):
         band = band.crop((max(0, xs[0] - pad), max(0, ys[0] - pad),
                           min(band.width, xs[-1] + pad), min(band.height, ys[-1] + pad)))
