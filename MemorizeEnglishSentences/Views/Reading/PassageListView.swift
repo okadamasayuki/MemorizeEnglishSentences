@@ -23,6 +23,10 @@ struct PassageListView: View {
     @State private var scrollProxy: ScrollViewProxy?
     /// 表示中の元スクショ(nil = 非表示)
     @State private var sourceImage: IdentifiableImage?
+    /// 画面中央付近にあるブロック(現在位置の表示・しおりの自動更新に使う)
+    @State private var currentBlockID: PersistentIdentifier?
+    /// 起動後に前回位置(しおり)へ一度だけスクロールしたか
+    @State private var didRestore = false
 
     private var blocks: [Block] {
         passages.flatMap { $0.orderedBlocks }
@@ -46,21 +50,21 @@ struct PassageListView: View {
                                     .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                                     .listRowSeparator(.hidden)
                                     .listRowBackground(Color.clear)
+                                    // 各行の画面上の位置を報告(中央に一番近い行を現在位置とする)
+                                    .background(
+                                        GeometryReader { geo in
+                                            Color.clear.preference(
+                                                key: BlockCenterKey.self,
+                                                value: [block.persistentModelID: geo.frame(in: .global).midY]
+                                            )
+                                        }
+                                    )
                                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                         Button(role: .destructive) {
                                             delete(block)
                                         } label: {
                                             Image(systemName: "trash")
                                         }
-                                    }
-                                    // 右スワイプでどこまで読んだかの目印を付ける
-                                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                        Button {
-                                            toggleMark(block)
-                                        } label: {
-                                            Image(systemName: block.isMarked ? "bookmark.slash" : "bookmark.fill")
-                                        }
-                                        .tint(.orange)
                                     }
                             }
                         }
@@ -69,8 +73,13 @@ struct PassageListView: View {
                         .scrollContentBackground(.hidden)
                         .background(isSelecting ? Color.red.opacity(0.07) : Color(.systemBackground))
                         .animation(.easeInOut(duration: 0.2), value: isSelecting)
+                        // 中央に最も近い行を現在位置として更新する
+                        .onPreferenceChange(BlockCenterKey.self) { positions in
+                            updateCurrentBlock(from: positions)
+                        }
                         .onAppear {
                             scrollProxy = proxy
+                            restoreLastPositionIfNeeded(proxy)
                         }
                     }
                 }
@@ -88,17 +97,12 @@ struct PassageListView: View {
                                 .foregroundStyle(isSelecting ? Color.red : Color.accentColor)
                         }
                     }
-                    // 目印(しおり)へジャンプ
-                    if let marked = blocks.first(where: { $0.isMarked }), !isSelecting {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button {
-                                withAnimation {
-                                    scrollProxy?.scrollTo(marked.persistentModelID, anchor: .center)
-                                }
-                            } label: {
-                                Image(systemName: "bookmark.fill")
-                                    .foregroundStyle(.orange)
-                            }
+                    // 現在位置(240件中 N件目)
+                    if !isSelecting {
+                        ToolbarItem(placement: .principal) {
+                            Text("\(blocks.count)件中 \(currentPositionText)件目")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -129,6 +133,12 @@ struct PassageListView: View {
             }
             .sheet(item: $sourceImage) { item in
                 SourceImageView(image: item.image)
+            }
+            // スクロールが落ち着いたら現在位置のブロックにしおりを保存する(書き込み過多を防ぐ)
+            .task(id: currentBlockID) {
+                try? await Task.sleep(for: .seconds(0.35))
+                guard !Task.isCancelled else { return }
+                persistBookmark()
             }
             // 単語の翻訳(常駐セッション 1 本に、タップされた単語をストリームで流し込む)
             .translationTask(wordConfiguration) { session in
@@ -270,13 +280,48 @@ struct PassageListView: View {
     }
 
     /// どこまで読んだかの目印。全体で 1 か所だけ(付け直すと移動、同じ場所なら解除)
-    private func toggleMark(_ block: Block) {
-        let wasMarked = block.isMarked
-        for other in blocks where other.isMarked {
-            other.isMarked = false
+    /// 現在位置の表示に使う番号(1始まり)。未確定のときは 1
+    private var currentPositionText: String {
+        guard let id = currentBlockID,
+              let index = blocks.firstIndex(where: { $0.persistentModelID == id }) else { return "1" }
+        return "\(index + 1)"
+    }
+
+    /// 各行の中央 Y から、画面中央に一番近い行を現在位置として選ぶ
+    private func updateCurrentBlock(from positions: [PersistentIdentifier: CGFloat]) {
+        guard !positions.isEmpty else { return }
+        let screenCenter = UIScreen.main.bounds.height / 2
+        let nearest = positions.min { abs($0.value - screenCenter) < abs($1.value - screenCenter) }
+        if let id = nearest?.key, id != currentBlockID {
+            currentBlockID = id
         }
-        block.isMarked = !wasMarked
-        try? context.save()
+    }
+
+    /// 現在位置のブロックにしおりを自動で付け替える(1か所だけ)
+    private func persistBookmark() {
+        guard let id = currentBlockID,
+              let target = blocks.first(where: { $0.persistentModelID == id }) else { return }
+        var changed = false
+        for block in blocks where block.isMarked && block.persistentModelID != id {
+            block.isMarked = false
+            changed = true
+        }
+        if !target.isMarked {
+            target.isMarked = true
+            changed = true
+        }
+        if changed { try? context.save() }
+    }
+
+    /// 起動後、前回のしおり位置へ一度だけスクロールする
+    private func restoreLastPositionIfNeeded(_ proxy: ScrollViewProxy) {
+        guard !didRestore else { return }
+        didRestore = true
+        guard let marked = blocks.first(where: { $0.isMarked }) else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.3))
+            withAnimation { proxy.scrollTo(marked.persistentModelID, anchor: .center) }
+        }
     }
 
     private func delete(_ block: Block) {
@@ -351,5 +396,13 @@ struct PassageListView: View {
         } catch {
             // オフライン・言語データ未ダウンロード時は静かに諦める(次回表示時に再試行)
         }
+    }
+}
+
+/// 各ブロックの画面上の中央 Y を集める PreferenceKey(現在位置の判定に使う)
+private struct BlockCenterKey: PreferenceKey {
+    static let defaultValue: [PersistentIdentifier: CGFloat] = [:]
+    static func reduce(value: inout [PersistentIdentifier: CGFloat], nextValue: () -> [PersistentIdentifier: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
 }

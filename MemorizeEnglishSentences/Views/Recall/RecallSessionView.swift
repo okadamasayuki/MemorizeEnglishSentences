@@ -46,6 +46,9 @@ struct RecallSessionView: View {
     @State private var warmupRetryCount = 0
     @State private var wordConfiguration: TranslationSession.Configuration?
 
+    // 元スクショ(音読タブと同じ挙動)
+    @State private var sourceImage: IdentifiableImage?
+
     private var passage: Passage {
         pages.first { $0.persistentModelID == selectedID } ?? initialPassage
     }
@@ -128,6 +131,16 @@ struct RecallSessionView: View {
                         .foregroundStyle(showHint ? Color.yellow : Color.accentColor)
                 }
             }
+            // 元スクショ(読み取りが正しいかすぐ確認できる。音読タブと同じ挙動)
+            if PageImageStore.hasImage(forBlockText: referenceText) {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        sourceImage = PageImageStore.image(forBlockText: referenceText).map(IdentifiableImage.init)
+                    } label: {
+                        Image(systemName: "photo")
+                    }
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 NavigationLink {
                     MistakeAnalysisView(passage: passage)
@@ -143,6 +156,9 @@ struct RecallSessionView: View {
         }
         .sheet(item: $selectedWord) { selected in
             WordPopupView(word: selected.word, meaning: wordMeaning)
+        }
+        .sheet(item: $sourceImage) { item in
+            SourceImageView(image: item.image)
         }
         // 単語の翻訳(常駐セッション 1 本に、長押しされた単語をストリームで流し込む)
         .translationTask(wordConfiguration) { session in
