@@ -21,6 +21,7 @@
 | `build_word_senses.py` | 訳語辞書+オーバーライドから word_senses.json を網羅検証つきで生成 |
 | `build_sentence_pairs.py` | 英文↔和訳を文ごとのペアに分割し sentence_pairs.json を生成(音読タブの交互表示用) |
 | `build_page_images.py` | 各ブロックだけを切り出した元スクショと manifest.json を生成(読み取り確認用) |
+| `build_recall_page_images.py` | 暗記文の元スクショをOCRで対応づけ、ページ画像と manifest.json を生成 |
 
 スクリプトのレイアウト前提(「Content Block」ラベル、右端の音声トラック番号、下端のページ番号)は
 特定の教材シリーズ向けなので、別レイアウトの教材では `parse.py` の調整が必要。
