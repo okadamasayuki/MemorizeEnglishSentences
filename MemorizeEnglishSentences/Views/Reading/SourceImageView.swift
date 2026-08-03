@@ -38,6 +38,8 @@ struct SourceImageView: View {
                         }
                     }
             }
+            // 拡大していない時はスクロールのバウンドを止める(下スワイプと競合してブレるのを防ぐ)
+            .scrollDisabled(scale <= 1.01)
             // 拡大していない時、下方向へスワイプすると閉じる
             .simultaneousGesture(
                 DragGesture(minimumDistance: 20)
