@@ -120,6 +120,26 @@ enum MacBridge {
         }
     }
 
+    /// 登録済み全英文の内容語について、規則生成のカタカナ読みを katakana_dump.json に書き出す。
+    /// (Claude Code が誤りを直して word_katakana.json を作るための突き合わせ用)
+    static func exportKatakanaReadings(context: ModelContext) {
+        let descriptor = FetchDescriptor<Block>()
+        guard let blocks = try? context.fetch(descriptor) else { return }
+        var words = Set<String>()
+        for block in blocks {
+            for token in WordTokenizer.tokenize(block.englishText) {
+                let w = token.normalized
+                if w.count >= 2, w.contains(where: { $0.isLetter }) {
+                    words.insert(w)
+                }
+            }
+        }
+        let dump = KatakanaPronunciation.dumpHeuristicReadings(words: Array(words))
+        if let data = try? JSONSerialization.data(withJSONObject: dump, options: [.prettyPrinted]) {
+            try? data.write(to: documents.appendingPathComponent("katakana_dump.json"))
+        }
+    }
+
     /// Claude Code が置いた sentence_pairs.json(英文↔和訳の文ごとのペア)を取り込む。
     /// 形式: [{"key": ブロック英文ハッシュ, "pairs": [{"en": 英文, "ja": 和訳}]}]
     /// 既存キーは上書き更新する。適用後はファイルを削除し、結果を sentence_pairs_result.json に書き出す。

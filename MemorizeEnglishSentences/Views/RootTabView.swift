@@ -32,6 +32,7 @@ struct RootTabView: View {
             MacBridge.applyTranslationsIfAny(context: context)
             MacBridge.applyDeletionsIfAny(context: context)
             MacBridge.exportPassages(context: context)
+            MacBridge.exportKatakanaReadings(context: context)
             MacBridge.exportVoices()
         }
     }

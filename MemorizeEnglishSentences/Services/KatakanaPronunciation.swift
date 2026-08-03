@@ -6,16 +6,46 @@ enum KatakanaPronunciation {
     static func katakana(for word: String) -> String {
         let normalized = word.lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Claude Code が投入した正しい読みの上書きデータを最優先(規則生成の誤りを直す)
+        let overrides = loadedOverrides()
+        if let ov = overrides[normalized] { return ov }
         if let exact = dictionary[normalized] {
             return exact
         }
         let letters = normalized.filter { $0.isLetter }
         if letters.isEmpty { return "" }
+        if let ov = overrides[String(letters)] { return ov }
         if let exact = dictionary[String(letters)] {
             return exact
         }
         let tokens = tokenize(Array(letters))
         return synthesize(tokens)
+    }
+
+    /// 規則生成では正しく出せない単語のカタカナ読み(word→カタカナ)。
+    /// Documents/word_katakana.json を一度だけ読み込む。
+    private static var overridesCache: [String: String]?
+    private static func loadedOverrides() -> [String: String] {
+        if let c = overridesCache { return c }
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("word_katakana.json")
+        guard let data = try? Data(contentsOf: url),
+              let map = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return [:]
+        }
+        overridesCache = map
+        return map
+    }
+
+    /// 登録済み全英文の内容語について、現在の規則生成の読みをダンプする(誤り修正の突き合わせ用)。
+    static func dumpHeuristicReadings(words: [String]) -> [String: String] {
+        var out: [String: String] = [:]
+        for w in words {
+            let letters = w.lowercased().filter { $0.isLetter }
+            guard letters.count >= 2 else { continue }
+            out[w] = synthesize(tokenize(Array(letters)))
+        }
+        return out
     }
 
     // MARK: - よく使う単語の辞書(規則変換より優先)
