@@ -14,6 +14,8 @@ struct SourceImageView: View {
 
     @State private var scale: CGFloat = 1
     @GestureState private var pinch: CGFloat = 1
+    /// 下スワイプで閉じるための一時的な下方向オフセット
+    @State private var dragOffset: CGFloat = 0
 
     var body: some View {
         NavigationStack {
@@ -36,6 +38,23 @@ struct SourceImageView: View {
                         }
                     }
             }
+            .offset(y: dragOffset)
+            // 拡大していない時、下方向へスワイプすると閉じる
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 20)
+                    .onChanged { value in
+                        if scale <= 1.01, value.translation.height > 0 {
+                            dragOffset = value.translation.height
+                        }
+                    }
+                    .onEnded { value in
+                        if scale <= 1.01, value.translation.height > 120 {
+                            dismiss()
+                        } else {
+                            withAnimation(.easeOut(duration: 0.2)) { dragOffset = 0 }
+                        }
+                    }
+            )
             .background(Color(.systemBackground))
             .navigationTitle("元のスクショ")
             .navigationBarTitleDisplayMode(.inline)
