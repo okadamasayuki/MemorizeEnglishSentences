@@ -38,7 +38,6 @@ struct SourceImageView: View {
                         }
                     }
             }
-            .offset(y: dragOffset)
             // 拡大していない時、下方向へスワイプすると閉じる
             .simultaneousGesture(
                 DragGesture(minimumDistance: 20)
@@ -64,5 +63,7 @@ struct SourceImageView: View {
                 }
             }
         }
+        // 下スワイプ時はナビバーを含む window 全体を一緒に下げる
+        .offset(y: dragOffset)
     }
 }
