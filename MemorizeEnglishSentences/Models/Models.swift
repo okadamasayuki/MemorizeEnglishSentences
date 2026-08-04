@@ -45,13 +45,10 @@ final class Idiom {
     var example: String
     /// 例文の和訳
     var exampleJa: String
-    /// 覚えた/要復習の管理
-    var memorizationStatusRaw: String = MemorizationStatus.normal.rawValue
-
-    var memorizationStatus: MemorizationStatus {
-        get { MemorizationStatus(rawValue: memorizationStatusRaw) ?? .normal }
-        set { memorizationStatusRaw = newValue.rawValue }
-    }
+    /// 星印(単語タブと同じ。付けた熟語だけに絞り込める)
+    var isStarred: Bool = false
+    /// (旧UIの名残。スキーマ互換のため残す。未使用)
+    var memorizationStatusRaw: String = "normal"
 
     init(number: Int, phrase: String, meaning: String, example: String, exampleJa: String) {
         self.number = number

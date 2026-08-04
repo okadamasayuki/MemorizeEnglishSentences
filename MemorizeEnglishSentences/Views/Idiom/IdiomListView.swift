@@ -1,18 +1,23 @@
 import SwiftData
 import SwiftUI
+import Translation
 
-/// 熟語タブ。熟語+例文を表示し、カードをタップすると意味(和訳)を表示する暗記カード。
-/// 「覚えた/要復習」で管理し、要復習だけに絞り込める。
+/// 熟語タブ。熟語+例文を表示し、タップすると熟語の横に意味、英文の下に和訳を表示するカード。
+/// 例文の単語長押しで意味+発音、元スクショも確認できる。
 struct IdiomListView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Idiom.number) private var idioms: [Idiom]
-    @AppStorage("idiomReviewOnly") private var reviewOnly = false
     /// 意味を表示中のカード
     @State private var revealed: Set<Int> = []
+    /// 表示中の元スクショ
+    @State private var sourceImage: IdentifiableImage?
 
-    private var shown: [Idiom] {
-        reviewOnly ? idioms.filter { $0.memorizationStatus == .needsReview } : idioms
-    }
+    // 単語長押し(音読タブと同じ仕組み)
+    @State private var selectedWord: SelectedWord?
+    @StateObject private var wordMeaning = WordMeaningModel()
+    @State private var wordBroker = WordTranslationBroker()
+    @State private var warmupRetryCount = 0
+    @State private var wordConfiguration: TranslationSession.Configuration?
 
     var body: some View {
         NavigationStack {
@@ -25,7 +30,7 @@ struct IdiomListView: View {
                     )
                 } else {
                     List {
-                        ForEach(shown) { idiom in
+                        ForEach(idioms) { idiom in
                             card(idiom)
                                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                                 .listRowSeparator(.hidden)
@@ -37,122 +42,113 @@ struct IdiomListView: View {
                 }
             }
             .navigationTitle("熟語")
-            .toolbar {
-                if !idioms.isEmpty {
-                    ToolbarItem(placement: .principal) {
-                        Text("\(idioms.count)語中 覚えた \(memorizedCount)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+            .sheet(item: $selectedWord) { selected in
+                WordPopupView(word: selected.word, meaning: wordMeaning)
+            }
+            .sheet(item: $sourceImage) { item in
+                SourceImageView(image: item.image)
+            }
+            // 単語の翻訳(常駐セッション 1 本に、長押しされた単語を流し込む)
+            .translationTask(wordConfiguration) { session in
+                do {
+                    _ = try await translate(session, "hello", timeoutSeconds: 3)
+                    warmupRetryCount = 0
+                } catch {
+                    if warmupRetryCount < 8 {
+                        warmupRetryCount += 1
+                        try? await Task.sleep(for: .seconds(0.5))
+                        wordConfiguration?.invalidate()
+                        return
                     }
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            reviewOnly.toggle()
-                        } label: {
-                            Image(systemName: reviewOnly ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                                .foregroundStyle(reviewOnly ? Color.orange : Color.accentColor)
+                }
+                for await target in wordBroker.requests() {
+                    do {
+                        let translated = try await translate(session, target, timeoutSeconds: 10)
+                        if selectedWord?.word == target { wordMeaning.japanese = translated }
+                    } catch {
+                        if wordBroker.shouldRetry(target) {
+                            wordBroker.stashForRetry(target)
+                            wordConfiguration?.invalidate()
+                            return
                         }
+                        if selectedWord?.word == target { wordMeaning.failed = true }
                     }
                 }
             }
+            .onAppear {
+                if wordConfiguration == nil {
+                    wordConfiguration = TranslationSession.Configuration(
+                        source: TranslationAvailability.english,
+                        target: TranslationAvailability.japanese
+                    )
+                }
+            }
         }
-    }
-
-    private var memorizedCount: Int {
-        idioms.filter { $0.memorizationStatus == .memorized }.count
     }
 
     @ViewBuilder
     private func card(_ idiom: Idiom) -> some View {
         let isRevealed = revealed.contains(idiom.number)
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
+            // 熟語 + (タップで)横に意味 + 右端に元スクショ
+            HStack(alignment: .top, spacing: 10) {
                 Text(idiom.phrase)
                     .font(.title3.bold())
-                Spacer()
-                if idiom.memorizationStatus != .normal {
-                    Image(systemName: idiom.memorizationStatus.iconName)
-                        .foregroundStyle(idiom.memorizationStatus == .memorized ? .green : .orange)
+                if isRevealed {
+                    Text(idiom.meaning)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                if PageImageStore.hasImage(forBlockText: idiom.example) {
+                    Button {
+                        sourceImage = PageImageStore.image(forBlockText: idiom.example).map(IdentifiableImage.init)
+                    } label: {
+                        Image(systemName: "photo").font(.subheadline).foregroundStyle(Color.accentColor)
+                    }
+                    .buttonStyle(.borderless)
                 }
             }
-            // 例文(熟語部分を太字にする)
-            exampleText(idiom)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
 
-            if isRevealed {
-                Divider()
-                Text(idiom.meaning)
-                    .font(.headline)
-                    .foregroundStyle(Color.accentColor)
-                if !idiom.exampleJa.isEmpty {
-                    Text(idiom.exampleJa)
+            // 例文(タップ可能な単語トークン。長押しで意味+発音)
+            FlowLayout(spacing: 4, lineSpacing: 6) {
+                ForEach(WordTokenizer.tokenize(idiom.example)) { token in
+                    Text(token.display)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                // 覚えた / 要復習 の切り替え
-                HStack(spacing: 8) {
-                    ForEach([MemorizationStatus.needsReview, .normal, .memorized]) { status in
-                        Button {
-                            idiom.memorizationStatus = (idiom.memorizationStatus == status) ? .normal : status
-                            try? context.save()
-                        } label: {
-                            Label(status.labelJa, systemImage: status.iconName)
-                                .font(.caption)
-                                .padding(.horizontal, 8).padding(.vertical, 5)
-                                .background(Capsule().fill(color(status).opacity(idiom.memorizationStatus == status ? 0.25 : 0.08)))
-                                .foregroundStyle(color(status))
+                        .onLongPressGesture {
+                            showWord(token.normalized.isEmpty ? token.display : token.normalized)
                         }
-                        .buttonStyle(.plain)
-                    }
                 }
-                .padding(.top, 2)
-            } else {
-                Text("タップして意味を表示")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            }
+
+            // 英文の和訳(タップで英文の下に表示)
+            if isRevealed, !idiom.exampleJa.isEmpty {
+                Text(idiom.exampleJa)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
         .contentShape(RoundedRectangle(cornerRadius: 12))
+        // タップで意味の表示/非表示(モーションなし)
         .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                if isRevealed { revealed.remove(idiom.number) } else { revealed.insert(idiom.number) }
-            }
+            if isRevealed { revealed.remove(idiom.number) } else { revealed.insert(idiom.number) }
         }
     }
 
-    private func color(_ status: MemorizationStatus) -> Color {
-        switch status {
-        case .needsReview: .orange
-        case .normal: .secondary
-        case .memorized: .green
+    /// 単語の意味を表示(内蔵辞書→Apple翻訳。カタカナ発音と発音ボタンはポップアップ側)
+    private func showWord(_ word: String) {
+        wordMeaning.reset()
+        selectedWord = SelectedWord(word: word)
+        if let entry = BasicWordDictionary.lookup(word) {
+            wordMeaning.japanese = entry
+            return
         }
+        wordBroker.request(word)
     }
-
-    /// 例文中の熟語(中身のある語)を太字にして表示する
-    private func exampleText(_ idiom: Idiom) -> Text {
-        let keywords = Set(
-            idiom.phrase.lowercased()
-                .split(whereSeparator: { !$0.isLetter })
-                .map(String.init)
-                .filter { $0.count >= 3 }  // A/B/to/on などは太字にしない
-        )
-        var result = Text("")
-        for (i, word) in idiom.example.split(separator: " ", omittingEmptySubsequences: false).enumerated() {
-            let bare = word.lowercased().trimmingCharacters(in: CharacterSet.letters.inverted)
-            let piece = Text(String(word))
-            result = result + (i == 0 ? piece : Text(" ") + piece).bold(shouldBold(bare, keywords))
-        }
-        return result
-    }
-
-    private func shouldBold(_ bare: String, _ keywords: Set<String>) -> Bool {
-        keywords.contains { bare == $0 || bare.hasPrefix($0) || $0.hasPrefix(bare) }
-    }
-}
-
-private extension Text {
-    func bold(_ on: Bool) -> Text { on ? self.bold() : self }
 }
