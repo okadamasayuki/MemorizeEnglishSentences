@@ -47,6 +47,8 @@ final class Idiom {
     var exampleJa: String
     /// 星印(単語タブと同じ。付けた熟語だけに絞り込める)
     var isStarred: Bool = false
+    /// しおり(どこまで進めたかの目印。全体で1か所)
+    var isBookmarked: Bool = false
     /// (旧UIの名残。スキーマ互換のため残す。未使用)
     var memorizationStatusRaw: String = "normal"
 
