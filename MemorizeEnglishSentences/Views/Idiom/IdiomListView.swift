@@ -158,8 +158,8 @@ struct IdiomListView: View {
                 }
             }
 
-            // 例文(単語長押しで意味+発音)
-            tokenFlow(idiom.example, font: .subheadline)
+            // 例文(単語長押しで意味+発音。熟語の一部を長押ししたら熟語の意味を表示)
+            exampleTokens(idiom)
 
             // 英文の和訳(タップで英文の下に表示)
             if isRevealed, !idiom.exampleJa.isEmpty {
@@ -180,21 +180,44 @@ struct IdiomListView: View {
         }
     }
 
-    /// 英文を、単語ごとに長押しできるトークンとして折り返し表示する
+    /// 例文を、単語ごとに長押しできるトークンとして折り返し表示する。
+    /// 熟語の一部(見出しの語)は太字にし、長押しで熟語の意味を表示する。
     @ViewBuilder
-    private func tokenFlow(_ text: String, font: Font) -> some View {
+    private func exampleTokens(_ idiom: Idiom) -> some View {
+        let keys = idiomKeys(idiom.phrase)
         FlowLayout(spacing: 4, lineSpacing: 6) {
-            ForEach(WordTokenizer.tokenize(text)) { token in
+            ForEach(WordTokenizer.tokenize(idiom.example)) { token in
                 let word = token.normalized
+                let isIdiom = isIdiomWord(word, keys)
                 Text(token.display)
-                    .font(font)
+                    .font(.subheadline)
+                    .fontWeight(isIdiom ? .bold : .regular)
                     .onLongPressGesture {
-                        // A / B / ~ など中身のない語は無視
-                        if word.count >= 2, word.contains(where: { $0.isLetter }) {
+                        if isIdiom {
+                            showIdiomMeaning(idiom)
+                        } else if word.count >= 2, word.contains(where: { $0.isLetter }) {
                             showWord(word)
                         }
                     }
             }
+        }
+    }
+
+    /// 熟語見出しの構成語(~ / A / B などのプレースホルダーは除く)
+    private func idiomKeys(_ phrase: String) -> [String] {
+        phrase.lowercased()
+            .split(whereSeparator: { !$0.isLetter })
+            .map(String.init)
+            .filter { $0.count >= 2 }
+    }
+
+    /// 例文のこの語が熟語の一部か(語尾変化を許容してマッチ)
+    private func isIdiomWord(_ token: String, _ keys: [String]) -> Bool {
+        guard token.count >= 2 else { return false }
+        return keys.contains { key in
+            token == key
+                || (key.count >= 3 && token.hasPrefix(key))   // bail→bailing, act→acting
+                || (token.count >= 3 && key.hasPrefix(token))  // 念のため逆向きも
         }
     }
 
