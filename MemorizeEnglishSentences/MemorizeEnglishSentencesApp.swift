@@ -16,6 +16,7 @@ struct MemorizeEnglishSentencesApp: App {
             SentencePairCacheEntry.self,
             RecallAttempt.self,
             VocabWord.self,
+            Idiom.self,
         ])
     }
 }

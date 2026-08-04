@@ -32,6 +32,36 @@ enum MemorizationStatus: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// 熟語タブの 1 項目(熟語+意味+例文)
+@Model
+final class Idiom {
+    /// 見出し語番号(2101 など)。並び順に使う
+    @Attribute(.unique) var number: Int
+    /// 熟語(例: "abide by ~")
+    var phrase: String
+    /// 意味(和訳。[= 類義語] を含む)
+    var meaning: String
+    /// 例文(英語)
+    var example: String
+    /// 例文の和訳
+    var exampleJa: String
+    /// 覚えた/要復習の管理
+    var memorizationStatusRaw: String = MemorizationStatus.normal.rawValue
+
+    var memorizationStatus: MemorizationStatus {
+        get { MemorizationStatus(rawValue: memorizationStatusRaw) ?? .normal }
+        set { memorizationStatusRaw = newValue.rawValue }
+    }
+
+    init(number: Int, phrase: String, meaning: String, example: String, exampleJa: String) {
+        self.number = number
+        self.phrase = phrase
+        self.meaning = meaning
+        self.example = example
+        self.exampleJa = exampleJa
+    }
+}
+
 /// 単語タブの 1 項目(英語フレーズ+和訳)
 @Model
 final class VocabWord {

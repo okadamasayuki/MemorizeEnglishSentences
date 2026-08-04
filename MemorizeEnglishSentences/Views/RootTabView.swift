@@ -15,6 +15,9 @@ struct RootTabView: View {
             Tab("単語", systemImage: "rectangle.stack.fill") {
                 VocabListView()
             }
+            Tab("熟語", systemImage: "text.book.closed.fill") {
+                IdiomListView()
+            }
         }
         .task {
             SampleData.seedIfNeeded(context: context)
@@ -29,6 +32,7 @@ struct RootTabView: View {
             MacBridge.importPassagesIfAny(context: context)
             MacBridge.importWordSensesIfAny(context: context)
             MacBridge.importSentencePairsIfAny(context: context)
+            MacBridge.importIdiomsIfAny(context: context)
             MacBridge.applyTranslationsIfAny(context: context)
             MacBridge.applyDeletionsIfAny(context: context)
             MacBridge.exportPassages(context: context)

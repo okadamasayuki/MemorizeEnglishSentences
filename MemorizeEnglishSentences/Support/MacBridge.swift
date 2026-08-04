@@ -120,6 +120,31 @@ enum MacBridge {
         }
     }
 
+    /// Claude Code が置いた import_idioms.json を熟語タブへ取り込む。
+    /// 形式: [{"number", "phrase", "meaning", "example", "exampleJa"}]
+    /// 同じ番号は重複させない。適用後はファイルを削除する。
+    static func importIdiomsIfAny(context: ModelContext) {
+        let url = documents.appendingPathComponent("import_idioms.json")
+        guard let data = try? Data(contentsOf: url),
+              let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return }
+
+        let descriptor = FetchDescriptor<Idiom>()
+        let existing = Set(((try? context.fetch(descriptor)) ?? []).map(\.number))
+        for item in list {
+            guard let number = item["number"] as? Int,
+                  let phrase = item["phrase"] as? String,
+                  let meaning = item["meaning"] as? String,
+                  let example = item["example"] as? String,
+                  !existing.contains(number) else { continue }
+            context.insert(Idiom(
+                number: number, phrase: phrase, meaning: meaning,
+                example: example, exampleJa: item["exampleJa"] as? String ?? ""
+            ))
+        }
+        try? context.save()
+        try? FileManager.default.removeItem(at: url)
+    }
+
     /// 登録済み全英文の内容語について、規則生成のカタカナ読みを katakana_dump.json に書き出す。
     /// (Claude Code が誤りを直して word_katakana.json を作るための突き合わせ用)
     static func exportKatakanaReadings(context: ModelContext) {
