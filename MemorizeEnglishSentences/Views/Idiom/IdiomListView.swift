@@ -193,10 +193,8 @@ struct IdiomListView: View {
                     .font(.subheadline)
                     .fontWeight(isIdiom ? .bold : .regular)
                     .onLongPressGesture {
-                        if isIdiom {
-                            showIdiomMeaning(idiom)
-                        } else if word.count >= 2, word.contains(where: { $0.isLetter }) {
-                            showWord(word)
+                        if word.count >= 2, word.contains(where: { $0.isLetter }) {
+                            showWord(word, in: idiom.example)
                         }
                     }
             }
@@ -228,10 +226,15 @@ struct IdiomListView: View {
         selectedWord = SelectedWord(word: idiom.phrase)
     }
 
-    /// 単語の意味を表示(内蔵辞書→Apple翻訳。カタカナ発音と発音ボタンはポップアップ側)
-    private func showWord(_ word: String) {
+    /// 単語の意味を表示(音読タブと同じ: 事前生成の文脈キャッシュ→内蔵辞書→Apple翻訳)。
+    /// 例文中の熟語部分は文脈キャッシュに熟語形の訳が入っているので、それが表示される。
+    private func showWord(_ word: String, in example: String) {
         wordMeaning.reset()
         selectedWord = SelectedWord(word: word)
+        if let cached = WordSenseLookup.cached(word: word, blockText: example, modelContext: context) {
+            wordMeaning.apply(cached)
+            return
+        }
         if let entry = BasicWordDictionary.lookup(word) {
             wordMeaning.japanese = entry
             return
