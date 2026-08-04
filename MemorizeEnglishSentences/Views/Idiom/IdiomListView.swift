@@ -100,8 +100,8 @@ struct IdiomListView: View {
     private func card(_ idiom: Idiom) -> some View {
         let isRevealed = revealed.contains(idiom.number)
         VStack(alignment: .leading, spacing: 8) {
-            // 熟語 + (タップで)横に意味 + 右端に元スクショ
-            HStack(alignment: .top, spacing: 10) {
+            // 熟語 + (タップで)横に意味 + 右端に元スクショ(縦中心をそろえる)
+            HStack(alignment: .center, spacing: 10) {
                 Text(idiom.phrase)
                     .font(.title3.bold())
                 if isRevealed {
