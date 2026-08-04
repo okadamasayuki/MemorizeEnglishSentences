@@ -62,6 +62,8 @@ struct IdiomListView: View {
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
+                        // 一番上に少し余白を足す
+                        .contentMargins(.top, 12, for: .scrollContent)
                         .onAppear {
                             scrollProxy = proxy
                             restoreBookmarkIfNeeded(proxy)
@@ -132,7 +134,10 @@ struct IdiomListView: View {
         VStack(alignment: .leading, spacing: 8) {
             // 熟語(単語長押し可) + (タップで)横に意味 + しおり/元スクショ(縦中心をそろえる)
             HStack(alignment: .center, spacing: 10) {
-                tokenFlow(idiom.phrase, font: .title3.bold())
+                // 熟語の見出し。長押しで熟語の意味+発音
+                Text(idiom.phrase)
+                    .font(.title3.bold())
+                    .onLongPressGesture { showIdiomMeaning(idiom) }
                 if isRevealed {
                     Text(idiom.meaning)
                         .font(.subheadline.weight(.semibold))
@@ -191,6 +196,13 @@ struct IdiomListView: View {
                     }
             }
         }
+    }
+
+    /// 熟語の見出し長押し: 熟語の意味(そのまま)と発音を表示する
+    private func showIdiomMeaning(_ idiom: Idiom) {
+        wordMeaning.reset()
+        wordMeaning.japanese = idiom.meaning
+        selectedWord = SelectedWord(word: idiom.phrase)
     }
 
     /// 単語の意味を表示(内蔵辞書→Apple翻訳。カタカナ発音と発音ボタンはポップアップ側)

@@ -31,8 +31,9 @@ struct WordPopupView: View {
                 }
             }
 
-            // 音声が聞けない場面用の読み方(カタカナ)
-            let pronunciation = KatakanaPronunciation.katakana(for: word)
+            // 音声が聞けない場面用の読み方(カタカナ)。熟語(スペースを含む)は規則生成が
+            // 不自然になるので出さない
+            let pronunciation = word.contains(" ") ? "" : KatakanaPronunciation.katakana(for: word)
             if !pronunciation.isEmpty {
                 Text(pronunciation)
                     .font(.subheadline)
