@@ -35,6 +35,16 @@ struct IdiomListView: View {
                                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                                 .listRowSeparator(.hidden)
                                 .listRowBackground(Color.clear)
+                                // 左スワイプで削除
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        revealed.remove(idiom.number)
+                                        context.delete(idiom)
+                                        try? context.save()
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                }
                         }
                     }
                     .listStyle(.plain)
