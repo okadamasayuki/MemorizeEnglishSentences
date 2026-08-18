@@ -12,6 +12,8 @@ struct Improvement: Identifiable, Codable, Equatable {
 /// 出先で思いついたことを放り込んでおき、家に帰って Mac が点いているときに
 /// 送るまでの置き場。学習データとは役目が違うので、別のファイルに持つ。
 final class ImprovementStore: ObservableObject {
+    /// 他の画面(音声プレイヤーの🚩など)からも同じ一覧に書き込めるよう共有する
+    static let shared = ImprovementStore()
 
     @Published private(set) var items: [Improvement] = []
 

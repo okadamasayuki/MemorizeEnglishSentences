@@ -7,7 +7,7 @@ import UIKit
 /// 項目を左から右へスワイプすると、Mac 側で Claude Code が立ち上がって
 /// その要望の実装を始める。
 struct ImprovementListView: View {
-    @StateObject private var store = ImprovementStore()
+    @ObservedObject private var store = ImprovementStore.shared
     /// 日本語の書き取り(長い口述でも切れないよう自動再開する)
     @State private var dictation = SpeechRecognitionService(locale: Locale(identifier: "ja-JP"))
 

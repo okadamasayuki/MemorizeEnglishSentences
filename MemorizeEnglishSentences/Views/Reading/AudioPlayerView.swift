@@ -19,6 +19,8 @@ struct AudioPlayerView: View {
     @State private var blockCount: Int = 1
     /// RWJ風の動画っぽい表示(プロトタイプ)を出しているか
     @State private var showKinetic = false
+    /// このブロックで🚩報告済みの文番号(旗を塗って二重報告を防ぐ目印)
+    @State private var reportedSegments: Set<Int> = []
 
     // 教材音声はレート変換の音質を考慮して 0.5〜2x
     private let speedOptions: [Double] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
@@ -197,6 +199,7 @@ struct AudioPlayerView: View {
         // ブロックが変わったら、そのブロックの保存済み回数設定を読み込む
         .onChange(of: audio.sequenceIndex) { _, _ in
             syncCounts()
+            reportedSegments.removeAll()
         }
     }
 
@@ -254,21 +257,38 @@ struct AudioPlayerView: View {
                             // この文の再生回数(記憶される)。×3は廃止し、タップで ×1↔×2。
                             // 表示中のページだけに出す(スワイプ途中の隣ページには出さない)
                             if isCurrent {
-                                Button {
-                                    setCount(i, countFor(i) == 1 ? 2 : 1)
-                                } label: {
-                                    Text("×\(countFor(i))")
-                                        .font(.footnote.weight(.semibold).monospacedDigit())
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 5)
-                                        .background(
-                                            Capsule().fill(countFor(i) > 1 ? Color.accentColor
-                                                                           : Color(.secondarySystemBackground))
-                                        )
-                                        .foregroundStyle(countFor(i) > 1 ? Color.white
-                                                         : (countFor(i) == 0 ? Color.secondary : Color.primary))
+                                VStack(spacing: 8) {
+                                    Button {
+                                        setCount(i, countFor(i) == 1 ? 2 : 1)
+                                    } label: {
+                                        Text("×\(countFor(i))")
+                                            .font(.footnote.weight(.semibold).monospacedDigit())
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 5)
+                                            .background(
+                                                Capsule().fill(countFor(i) > 1 ? Color.accentColor
+                                                                               : Color(.secondarySystemBackground))
+                                            )
+                                            .foregroundStyle(countFor(i) > 1 ? Color.white
+                                                             : (countFor(i) == 0 ? Color.secondary : Color.primary))
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    // 切れ目が変な文の報告(改善タブへ自動で書き込まれる)
+                                    Menu {
+                                        Button("文頭が変(頭が欠ける・早く始まる)") {
+                                            reportSegmentIssue(seg: seg, index: i, part: "文頭")
+                                        }
+                                        Button("文末が変(尻切れ・次にかぶる)") {
+                                            reportSegmentIssue(seg: seg, index: i, part: "文末")
+                                        }
+                                    } label: {
+                                        Image(systemName: reportedSegments.contains(i) ? "flag.fill" : "flag")
+                                            .font(.footnote)
+                                            .foregroundStyle(reportedSegments.contains(i) ? Color.orange : Color.secondary)
+                                            .frame(width: 30, height: 24)
+                                    }
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -336,6 +356,19 @@ struct AudioPlayerView: View {
         blockCount = n
         SentenceRepeatStore.globalBlockCount = n
         audio.updateGlobalBlockRepeat(n)
+    }
+
+    /// 切れ目が変な文の報告を改善タブの一覧へ書き込む(あとでスワイプしてMacへ送る)
+    private func reportSegmentIssue(seg: AudioSegment, index: Int, part: String) {
+        let block = audio.currentItem?.english ?? ""
+        let report = """
+        【音声の区切り修正】\(part)が変
+        文: \(seg.en)
+        (項目\((audio.sequenceIndex ?? 0) + 1)・文\(index + 1)、ブロック先頭: \(String(block.prefix(60)))…)
+        """
+        ImprovementStore.shared.add(report)
+        reportedSegments.insert(index)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
     /// 現在ブロックの保存済み回数設定を読み込む
