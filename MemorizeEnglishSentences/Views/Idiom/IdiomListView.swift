@@ -91,9 +91,12 @@ struct IdiomListView: View {
                 } else {
                     ScrollViewReader { proxy in
                         List {
-                            ForEach(idioms) { idiom in
+                            // 識別子は「番号」に統一する。行に別系統の .id() を振ると、
+                            // List が全行のIDを知るために300行を毎回組み立ててしまい、
+                            // タブに入るたび約5秒・出るたび約3秒フリーズしていた
+                            // (しおりへの scrollTo はこの番号識別子で動く)。
+                            ForEach(idioms, id: \.number) { idiom in
                                 card(idiom)
-                                    .id(idiom.number)
                                     .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                                     .listRowSeparator(.hidden)
                                     .listRowBackground(Color.clear)
@@ -125,10 +128,7 @@ struct IdiomListView: View {
                         .onAppear {
                             scrollProxy = proxy
                             PerfLog.log("idiom list appeared (\(idioms.count) rows)")
-                            // しおり位置への自動スクロールはやめた:
-                            // List の scrollTo は目的の行まで全行を組み立てるため、
-                            // しおりが深いとタブを開くだけで数秒固まる。
-                            // しおりへは右上のボタンで飛ぶ(待ち時間が予測できる操作にする)。
+                            restoreBookmarkIfNeeded(proxy)
                         }
                     }
                 }
@@ -295,6 +295,18 @@ struct IdiomListView: View {
             context.insert(WordCacheEntry(word: target, japanese: translation))
         }
         try? context.save()
+    }
+
+    /// 起動後の初回表示時に、しおりの位置まで自動スクロールする
+    /// (識別子を番号に統一したので、音読タブと同じく全行構築なしで飛べる)
+    @State private var didRestore = false
+    private func restoreBookmarkIfNeeded(_ proxy: ScrollViewProxy) {
+        guard !didRestore else { return }
+        didRestore = true
+        guard let marked = idioms.first(where: { $0.isBookmarked }) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            proxy.scrollTo(marked.number, anchor: .center)
+        }
     }
 
     /// しおりは全体で1か所。付け直すと移動、同じ場所なら解除
