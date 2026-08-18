@@ -122,10 +122,15 @@ struct AudioPlayerView: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            // スワイプでページが替わったら再生をその項目へ移す(モーションはTabView任せ)
-            .onChange(of: pageSelection) { _, newValue in
-                if newValue != (audio.sequenceIndex ?? 0) {
-                    audio.jump(to: newValue)
+            // スワイプでページが替わったら再生をその項目へ移す。
+            // ドラッグの途中(半分越え)で選択が変わった瞬間に切り替えるとジェスチャーが
+            // 断ち切られて「勝手にスワイプし切る」動きになるため、指が離れて
+            // 落ち着いてから(0.25秒後に)切り替える。途中で戻せば何も起きない
+            .task(id: pageSelection) {
+                try? await Task.sleep(for: .seconds(0.25))
+                guard !Task.isCancelled else { return }
+                if pageSelection != (audio.sequenceIndex ?? 0) {
+                    audio.jump(to: pageSelection)
                 }
             }
             // 自動で次の項目へ進んだ時などは、ページ表示を追従させる
