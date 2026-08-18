@@ -165,6 +165,8 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     private let jaSynthesizer = AVSpeechSynthesizer()
     /// 事前生成の和訳音声(VOICEVOX)の再生用
     private var jaPlayer: AVAudioPlayer?
+    /// 「和訳→英文」順で、いま文頭の和訳を読み上げ中(読み終えたら英文を流す)
+    private var jaLeadPending = false
     /// いま和訳を読み上げ中か(ファイル再生・TTSどちらも)
     private var isSpeakingJa = false
     /// 和訳読み上げ用の日本語ボイス。端末に入っている中で最高品質のものを選ぶ
@@ -469,8 +471,14 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         isPaused = false
         rebuildWindows()
         progress.position = 0
-        newPlayer.play()
-        startTimer()
+        // 「和訳→英文」順のときは、ブロック最初の文も和訳から
+        if jaAfterSentence, jaOrderFirst, let ja = jaText(forSegment: seg), !ja.isEmpty {
+            jaLeadPending = true
+            speakJa(ja)
+        } else {
+            newPlayer.play()
+            startTimer()
+        }
     }
 
     /// 文×回数を展開した再生窓の列と合計時間を作る(回数設定を織り込んだ長さになる)
@@ -508,6 +516,29 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         }
     }
 
+    /// 表示が「和訳→英文」の順のとき、音声も和訳を先に読む(表示順と音声順を一致させる)
+    private var jaOrderFirst: Bool {
+        UserDefaults.standard.bool(forKey: "audioJaFirst")
+    }
+
+    /// この文の和訳を読み上げる。事前生成音声(VOICEVOX)があればそれを再生し、無い文だけTTSで読む
+    private func speakJa(_ ja: String) {
+        isSpeakingJa = true
+        if items.indices.contains(currentIndex),
+           let url = JaAudioStore.url(forBlockText: items[currentIndex].english, segmentIndex: curSeg),
+           let filePlayer = try? AVAudioPlayer(contentsOf: url) {
+            filePlayer.delegate = self
+            filePlayer.enableRate = true
+            filePlayer.rate = Float(speed)
+            jaPlayer = filePlayer
+            filePlayer.play()
+        } else {
+            let utterance = AVSpeechUtterance(string: ja)
+            utterance.voice = japaneseVoice
+            jaSynthesizer.speak(utterance)
+        }
+    }
+
     /// いまの文を1回読み終えた時の分岐(繰り返す / 和訳を挟む / 次の文へ / 次のブロックへ)。
     /// force=true は「設定変更でいまの文が×0になった」時で、回数消化とみなして先へ進む。
     private func advanceAfterSegment(force: Bool = false) {
@@ -520,47 +551,45 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
                 return
             }
         }
-        // 「英文→和訳」交互モード: この文の繰り返しを消化したら、和訳を読み上げてから先へ進む。
-        // 事前生成音声(VOICEVOX)があればそれを再生し、無い文だけTTSで読む
-        if jaAfterSentence, !isSpeakingJa, !force, let ja = jaText(forSegment: curSeg), !ja.isEmpty {
+        // 「英文→和訳」順のとき: この文の繰り返しを消化したら、和訳を読み上げてから先へ進む。
+        // (「和訳→英文」順のときは文の頭で読み上げ済みなので、ここでは読まない)
+        if jaAfterSentence, !jaOrderFirst, !isSpeakingJa, !force, let ja = jaText(forSegment: curSeg), !ja.isEmpty {
             player.pause()
             stopTimer()
-            isSpeakingJa = true
-            if items.indices.contains(currentIndex),
-               let url = JaAudioStore.url(forBlockText: items[currentIndex].english, segmentIndex: curSeg),
-               let filePlayer = try? AVAudioPlayer(contentsOf: url) {
-                filePlayer.delegate = self
-                filePlayer.enableRate = true
-                filePlayer.rate = Float(speed)
-                jaPlayer = filePlayer
-                filePlayer.play()
-            } else {
-                let utterance = AVSpeechUtterance(string: ja)
-                utterance.voice = japaneseVoice
-                jaSynthesizer.speak(utterance)
-            }
+            speakJa(ja)
             return
         }
         advanceToNextScheduled()
     }
 
+    /// 指定の文へ入る。「和訳→英文」順のときは、先に和訳を読み上げてから英文を流す
+    private func beginSegment(_ seg: Int) {
+        guard let player else { return }
+        curSeg = seg
+        curRep = 0
+        if jaAfterSentence, jaOrderFirst, !isSpeakingJa, let ja = jaText(forSegment: seg), !ja.isEmpty {
+            player.pause()
+            stopTimer()
+            highlight.range = nil
+            jaLeadPending = true
+            speakJa(ja)
+            return
+        }
+        let from = segReplayStarts.indices.contains(seg) ? segReplayStarts[seg] : segStarts[seg]
+        replay(from: from, player: player)
+    }
+
     /// 次の予定(次の文 / 次の周 / 次のブロック)へ進む
     private func advanceToNextScheduled() {
-        guard let player else { return }
+        guard player != nil else { return }
         if let next = nextScheduled(from: curSeg + 1) {
-            curSeg = next
-            curRep = 0
-            let from = segReplayStarts.indices.contains(next) ? segReplayStarts[next] : segStarts[next]
-            replay(from: from, player: player)
+            beginSegment(next)
             return
         }
         // ブロック内の予定を消化 → 全体繰り返しが残っていればもう1周
         if blockPassesDone + 1 < blockRepeatCount, let first = nextScheduled(from: 0) {
             blockPassesDone += 1
-            curSeg = first
-            curRep = 0
-            let from = segReplayStarts.indices.contains(first) ? segReplayStarts[first] : segStarts[first]
-            replay(from: from, player: player)
+            beginSegment(first)
             return
         }
         // 次のブロックへ
@@ -578,15 +607,29 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         return item.japanese
     }
 
+    /// いまの文の英文部分を頭から流す(文頭の和訳読みを終えた後に使う)
+    private func startEnglishOfCurrentSegment() {
+        guard let player else { return }
+        let from = segReplayStarts.indices.contains(curSeg) ? segReplayStarts[curSeg] : (segStarts.indices.contains(curSeg) ? segStarts[curSeg] : 0)
+        replay(from: from, player: player)
+    }
+
     /// 和訳読み上げを中断する。resume=true なら教材音声の再生も再開する
+    /// (文頭の和訳読みの途中だった場合は、次へ飛ばずにいまの文の英文から再開する)
     private func cancelJaSpeech(resume: Bool = false) {
         guard isSpeakingJa else { return }
         isSpeakingJa = false
+        let wasLead = jaLeadPending
+        jaLeadPending = false
         jaPlayer?.stop()
         jaPlayer = nil
         jaSynthesizer.stopSpeaking(at: .immediate)
         if resume, isPlayingSequence, !isPaused {
-            advanceToNextScheduled()
+            if wasLead {
+                startEnglishOfCurrentSegment()
+            } else {
+                advanceToNextScheduled()
+            }
         }
     }
 
@@ -670,12 +713,17 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
 
     func audioPlayerDidFinishPlaying(_ finished: AVAudioPlayer, successfully flag: Bool) {
         DispatchQueue.main.async {
-            // 事前生成の和訳音声を読み終えた → 次の予定へ進む
+            // 事前生成の和訳音声を読み終えた → (文頭読みなら英文へ / 文末読みなら次の予定へ)
             if finished === self.jaPlayer {
                 self.jaPlayer = nil
                 guard self.isSpeakingJa else { return }
                 self.isSpeakingJa = false
                 guard self.isPlayingSequence, !self.isPaused else { return }
+                if self.jaLeadPending {
+                    self.jaLeadPending = false
+                    self.startEnglishOfCurrentSegment()
+                    return
+                }
                 self.advanceToNextScheduled()
                 return
             }
@@ -695,6 +743,11 @@ extension AudioSequencePlayer: AVSpeechSynthesizerDelegate {
             guard self.isSpeakingJa else { return }
             self.isSpeakingJa = false
             guard self.isPlayingSequence, !self.isPaused else { return }
+            if self.jaLeadPending {
+                self.jaLeadPending = false
+                self.startEnglishOfCurrentSegment()
+                return
+            }
             self.advanceToNextScheduled()
         }
     }
