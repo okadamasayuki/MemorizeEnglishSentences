@@ -25,6 +25,8 @@ struct AudioPlayerView: View {
     /// ページめくりの選択状態。プレイヤー内部の更新を待つと
     /// スワイプが一瞬引き戻される変なモーションになるため、ローカルで即時に持つ
     @State private var pageSelection = 0
+    /// ページングスクロールの現在ページ(スクロールが落ち着くと更新される)
+    @State private var scrollID: Int?
 
     // 教材音声はレート変換の音質を考慮して 0.5〜2x
     private let speedOptions: [Double] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
@@ -105,37 +107,43 @@ struct AudioPlayerView: View {
             .padding(.horizontal)
             .padding(.top, 26)
 
-            // いま読んでいるブロック。暗記タブと同じページめくり(指に追従)で
-            // 左右スワイプすると前後の項目へ移動し、その項目の頭から再生される。
-            TabView(selection: $pageSelection) {
-                // TabView(.page) は全ページを一度に作ってしまうため、
-                // 表示中と左右1ページ以外は空にして軽くする(240項目で顕著に効く)
-                ForEach(0..<max(audio.itemCount, 1), id: \.self) { index in
-                    Group {
-                        if abs(index - pageSelection) <= 1 {
-                            page(index)
-                        } else {
-                            Color.clear
+            // いま読んでいるブロック。左右スワイプで前後の項目へ移動し、その項目の頭から再生される。
+            // ページ式TabViewは指を離す前に50%で確定してしまうため、
+            // 指に最後まで追従する標準のページングスクロールを使う
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 0) {
+                    // 表示中と左右1ページ以外は空にして軽くする(240項目で顕著に効く)
+                    ForEach(0..<max(audio.itemCount, 1), id: \.self) { index in
+                        Group {
+                            if abs(index - (pageSelection)) <= 1 {
+                                page(index)
+                            } else {
+                                Color.clear
+                            }
                         }
+                        .containerRelativeFrame(.horizontal)
                     }
-                    .tag(index)
                 }
+                .scrollTargetLayout()
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            // スワイプでページが替わったら再生をその項目へ移す。
-            // ドラッグの途中(半分越え)で選択が変わった瞬間に切り替えるとジェスチャーが
-            // 断ち切られて「勝手にスワイプし切る」動きになるため、指が離れて
-            // 落ち着いてから(0.25秒後に)切り替える。途中で戻せば何も起きない
-            .task(id: pageSelection) {
-                try? await Task.sleep(for: .seconds(0.25))
+            .scrollTargetBehavior(.paging)
+            .scrollIndicators(.hidden)
+            .scrollPosition(id: $scrollID)
+            // ページが確定したら再生をその項目へ移す(スクロールが落ち着いてから)
+            .task(id: scrollID) {
+                guard let id = scrollID else { return }
+                pageSelection = id
+                try? await Task.sleep(for: .seconds(0.2))
                 guard !Task.isCancelled else { return }
-                if pageSelection != (audio.sequenceIndex ?? 0) {
-                    audio.jump(to: pageSelection)
+                if id != (audio.sequenceIndex ?? 0) {
+                    audio.jump(to: id)
                 }
             }
             // 自動で次の項目へ進んだ時などは、ページ表示を追従させる
             .onReceive(audio.$sequenceIndex) { idx in
-                if let idx, idx != pageSelection { pageSelection = idx }
+                guard let idx, idx != pageSelection else { return }
+                pageSelection = idx
+                withAnimation(.easeInOut(duration: 0.25)) { scrollID = idx }
             }
 
             // 再生時間スライダー(×2などの回数設定を織り込んだ合計時間)
@@ -212,6 +220,7 @@ struct AudioPlayerView: View {
         .onAppear {
             syncCounts()
             pageSelection = audio.sequenceIndex ?? 0
+            scrollID = audio.sequenceIndex ?? 0
         }
         // ブロックが変わったら、そのブロックの保存済み回数設定を読み込む
         .onChange(of: audio.sequenceIndex) { _, _ in
