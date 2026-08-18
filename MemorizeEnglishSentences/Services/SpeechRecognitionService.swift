@@ -124,6 +124,12 @@ final class SpeechRecognitionService {
         inputNode.removeTap(onBus: 0)
         // フォーマットのハードコード禁止 — inputNode の実フォーマットを使う
         let format = inputNode.outputFormat(forBus: 0)
+        // マイクが使えない環境(シミュレーターや通話中など)ではフォーマットが
+        // 0Hz/0chになり、そのまま installTap するとクラッシュする
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            throw NSError(domain: "SpeechRecognitionService", code: -10,
+                          userInfo: [NSLocalizedDescriptionKey: "マイクを利用できません"])
+        }
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             request.append(buffer)
         }
@@ -147,6 +153,7 @@ final class SpeechRecognitionService {
                 // final が直前の部分認識より短いことがあるため、長い方を採用して消失を防ぐ
                 let finalText = result.bestTranscription.formattedString
                 let chosen = finalText.count >= partialText.count ? finalText : partialText
+                PerfLog.log("dict final len=\(finalText.count) partial=\(partialText.count) confirmed=\(confirmedText.count)")
                 appendConfirmed(chosen)
                 partialText = ""
                 if isRecording, autoRestart {
@@ -165,6 +172,7 @@ final class SpeechRecognitionService {
         if error != nil {
             // final が届かないままエラーで終わることがある(約 1 分制限など)。
             // 認識途中のテキストを確定分に退避してから再開し、回答が消えないようにする。
+            PerfLog.log("dict error partial=\(partialText.count) confirmed=\(confirmedText.count) rec=\(isRecording) err=\((error! as NSError).domain)#\((error! as NSError).code)")
             salvagePartial()
             if isRecording, autoRestart {
                 restartRecognition()
@@ -182,13 +190,32 @@ final class SpeechRecognitionService {
         partialText = ""
     }
 
-    /// 部分認識の更新。認識器の内部リセットで大幅に短くなったときは
-    /// それまでの内容を確定分へ退避してから置き換える(表示が消えるのを防ぐ)
+    /// 部分認識が最後に更新された時刻(無音をはさんだ言い直しの検出に使う)
+    private var lastPartialAt = Date.distantPast
+
+    /// 部分認識の更新。
+    /// 認識器は無音をはさむと「新しい発話」として文字起こしを仕切り直すことがあり、
+    /// そのまま置き換えると直前に話した内容が消える。次の2つの場合は、
+    /// それまでの内容を確定分へ退避してから置き換える(Claudeの音声入力と同じく溜まり続ける):
+    /// 1. 1.2秒以上の間をおいて届いた更新で、文字数が伸びていない(=言い直し)
+    /// 2. 大幅な縮小(かな漢字変換の揺れでは起きない規模)
+    /// ※かな漢字変換の揺れは高頻度(1秒未満間隔)で届くため、時間条件で誤退避を防ぐ
     private func updatePartial(_ newText: String) {
-        if partialText.count > 20, newText.count < partialText.count / 2 {
-            salvagePartial()
+        let now = Date()
+        let gap = now.timeIntervalSince(lastPartialAt)
+        if !partialText.isEmpty {
+            if gap > 1.2, !newText.hasPrefix(partialText) {
+                // 間をおいた更新で前置きが引き継がれていない=新しい発話として仕切り直された
+                PerfLog.log(String(format: "dict salvage(gap %.1fs) %d->%d", gap, partialText.count, newText.count))
+                salvagePartial()
+            } else if partialText.count > 8, newText.count < partialText.count / 2 {
+                // 発話中の大幅縮小(かな漢字変換の揺れでは起きない規模)
+                PerfLog.log("dict salvage(shrink) \(partialText.count)->\(newText.count)")
+                salvagePartial()
+            }
         }
         partialText = newText
+        lastPartialAt = now
     }
 
     private func appendConfirmed(_ segment: String) {

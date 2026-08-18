@@ -47,10 +47,18 @@ struct ImprovementListView: View {
                 }
             }
             .onAppear { checkReachability() }
+            // 動作検証用: memoeng://improve/mic で書き取りを開始/終了できる
+            // (シミュレーターで音声入力の消失を自動再現するのに使う)
+            .onOpenURL { url in
+                if url.host() == "improve", url.lastPathComponent == "mic" {
+                    toggleDictation()
+                }
+            }
             // 聞き取りの途中経過を入力欄へ流し込む(手で書いた分の後ろに足す)
             .onChange(of: dictation.fullText) { _, text in
                 guard dictation.isRecording, !text.isEmpty else { return }
                 draft = dictationBase.isEmpty ? text : dictationBase + "\n" + text
+                PerfLog.log("draft len=\(draft.count) [\(draft.suffix(24))]")
             }
             .alert("送れませんでした", isPresented: showErrorBinding) {
                 Button("OK") { errorMessage = nil }
