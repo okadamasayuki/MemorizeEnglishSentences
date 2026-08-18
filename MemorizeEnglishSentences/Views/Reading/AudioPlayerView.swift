@@ -129,12 +129,11 @@ struct AudioPlayerView: View {
             .scrollTargetBehavior(.paging)
             .scrollIndicators(.hidden)
             .scrollPosition(id: $scrollID)
-            // ページが確定したら再生をその項目へ移す(スクロールが落ち着いてから)
-            .task(id: scrollID) {
-                guard let id = scrollID else { return }
+            // 指が触れている間・慣性中は一切切り替えず、完全に止まってから
+            // 再生をその項目へ移す(ドラッグの途中で引っかからないように)
+            .onScrollPhaseChange { _, newPhase in
+                guard newPhase == .idle, let id = scrollID else { return }
                 pageSelection = id
-                try? await Task.sleep(for: .seconds(0.2))
-                guard !Task.isCancelled else { return }
                 if id != (audio.sequenceIndex ?? 0) {
                     audio.jump(to: id)
                 }
