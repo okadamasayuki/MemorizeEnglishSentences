@@ -245,21 +245,13 @@ struct PassageListView: View {
                                     .foregroundStyle(.red)
                             }
                         } else {
-                            HStack(spacing: 14) {
-                                // 最初から再生
-                                Button {
-                                    startPlayback(fromBeginning: true)
-                                } label: {
-                                    Image(systemName: "backward.end.circle.fill")
-                                        .foregroundStyle(Color.accentColor)
-                                }
-                                // 続きから再生(最後に聴いていた英文から)
-                                Button {
-                                    startPlayback(fromBeginning: false)
-                                } label: {
-                                    Image(systemName: "play.circle.fill")
-                                        .foregroundStyle(Color.accentColor)
-                                }
+                            // 続きから再生(最後に聴いていた英文から)。
+                            // 「最初から再生」ボタンは使わないため廃止(2026-08-18の要望)
+                            Button {
+                                startPlayback(fromBeginning: false)
+                            } label: {
+                                Image(systemName: "play.circle.fill")
+                                    .foregroundStyle(Color.accentColor)
                             }
                         }
                     }

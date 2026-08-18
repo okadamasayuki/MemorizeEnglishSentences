@@ -1,3 +1,4 @@
+import Combine
 import SwiftData
 import SwiftUI
 
@@ -21,6 +22,8 @@ struct RecallListView: View {
     @State private var isPlayingSequence = false
     /// 連続再生プレイヤーの表示
     @State private var showPlayer = false
+    /// 事前生成音声プレイヤーの表示
+    @State private var showAudioPlayer = false
     /// 連続再生中の英文・和訳
     @State private var playerItems: [PlaybackItem] = []
     /// 連続再生の速度倍率(1.0=標準。アプリを閉じても記憶する)
@@ -44,10 +47,41 @@ struct RecallListView: View {
         playbackPassages.map { PlaybackItem(english: $0.englishFullText, japanese: $0.japaneseFullText) }
     }
 
-    /// 指定の文章から(なければ先頭から)連続再生を始める
+    /// 指定の文章から(なければ先頭から)連続再生を始める。
+    /// 事前生成した音声(自然な女性ボイス)がある項目はそちらを再生し、
+    /// 無い項目だけ従来のTTSで読む(音読タブの教材音声と同じ仕組み)。
     private func startPlayback(from passage: Passage?) {
+        let targets = playbackPassages
+        guard !targets.isEmpty else { return }
+
+        let audioTargets = targets.filter { BlockAudioStore.hasAudio(forBlockText: $0.englishFullText) }
+        if !audioTargets.isEmpty {
+            let items: [AudioPlaybackItem] = audioTargets.compactMap { p in
+                guard let a = BlockAudioStore.item(forBlockText: p.englishFullText) else { return nil }
+                let segments = SentencePairLookup.cached(blockText: p.englishFullText, modelContext: context)
+                    .flatMap { pairs in
+                        AudioPlaybackItem.buildSegments(english: p.englishFullText,
+                                                        pairs: pairs.map { ($0.en, $0.ja) },
+                                                        words: a.words)
+                    }
+                let counts = SentenceRepeatStore.counts(forBlockText: p.englishFullText,
+                                                        sentenceCount: segments?.count ?? 0)
+                return AudioPlaybackItem(english: p.englishFullText, japanese: p.japaneseFullText,
+                                         url: a.url, words: a.words, segments: segments,
+                                         repeatCounts: counts, silences: a.silences,
+                                         blockRepeat: SentenceRepeatStore.globalBlockCount)
+            }
+            if !items.isEmpty {
+                let startIndex = passage
+                    .flatMap { p in audioTargets.firstIndex { $0.persistentModelID == p.persistentModelID } } ?? 0
+                AudioSequencePlayer.shared.start(items: items, startAt: startIndex, speed: listenSpeed)
+                showAudioPlayer = true
+                return
+            }
+        }
+
+        // 事前生成音声がまだ無い場合のTTSフォールバック
         let items = visibleItems
-        guard !items.isEmpty else { return }
         let startIndex = passage
             .flatMap { p in playbackPassages.firstIndex { $0.persistentModelID == p.persistentModelID } } ?? 0
         playerItems = items
@@ -131,6 +165,7 @@ struct RecallListView: View {
                     Button {
                         if isPlayingSequence {
                             speech.stop()
+                            AudioSequencePlayer.shared.stop()
                         } else {
                             startPlayback(from: nil)
                         }
@@ -156,12 +191,21 @@ struct RecallListView: View {
             .fullScreenCover(isPresented: $showPlayer) {
                 SentencePlayerView(items: playerItems)
             }
+            // 事前生成音声のプレイヤー(音読タブと同じ画面)
+            .fullScreenCover(isPresented: $showAudioPlayer) {
+                AudioPlayerView()
+            }
             // 暗記セッションに入る時などは連続再生を止める
             .onChange(of: path) { _, newPath in
-                if !newPath.isEmpty { speech.stop() }
+                if !newPath.isEmpty {
+                    speech.stop()
+                    AudioSequencePlayer.shared.stop()
+                }
             }
             // 再生中かどうかだけを監視する(プレイヤー全体を @ObservedObject にしない)
-            .onReceive(SpeechSynthesisService.shared.$isPlayingSequence) { playing in
+            .onReceive(SpeechSynthesisService.shared.$isPlayingSequence
+                .combineLatest(AudioSequencePlayer.shared.$isPlayingSequence)) { tts, audio in
+                let playing = tts || audio
                 if isPlayingSequence != playing { isPlayingSequence = playing }
             }
         }
