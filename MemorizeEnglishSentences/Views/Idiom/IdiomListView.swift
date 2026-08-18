@@ -29,7 +29,6 @@ struct IdiomListView: View {
     /// 表示中の元スクショ
     @State private var sourceImage: IdentifiableImage?
     @State private var scrollProxy: ScrollViewProxy?
-    @State private var didRestore = false
 
     // 熟語の意味シート
     @State private var selectedIdiom: SelectedIdiom?
@@ -71,8 +70,10 @@ struct IdiomListView: View {
     private func loadIfNeeded() {
         guard !didLoad else { return }
         didLoad = true
-        let descriptor = FetchDescriptor<Idiom>(sortBy: [SortDescriptor(\.number)])
-        allIdioms = (try? context.fetch(descriptor)) ?? []
+        PerfLog.measure("idiom fetch") {
+            let descriptor = FetchDescriptor<Idiom>(sortBy: [SortDescriptor(\.number)])
+            allIdioms = (try? context.fetch(descriptor)) ?? []
+        }
     }
 
     var body: some View {
@@ -123,7 +124,11 @@ struct IdiomListView: View {
                         .contentMargins(.top, 10, for: .scrollContent)
                         .onAppear {
                             scrollProxy = proxy
-                            restoreBookmarkIfNeeded(proxy)
+                            PerfLog.log("idiom list appeared (\(idioms.count) rows)")
+                            // しおり位置への自動スクロールはやめた:
+                            // List の scrollTo は目的の行まで全行を組み立てるため、
+                            // しおりが深いとタブを開くだけで数秒固まる。
+                            // しおりへは右上のボタンで飛ぶ(待ち時間が予測できる操作にする)。
                         }
                     }
                 }
@@ -302,13 +307,4 @@ struct IdiomListView: View {
         try? context.save()
     }
 
-    /// 起動後の初回表示時に、しおりの位置まで自動スクロールする
-    private func restoreBookmarkIfNeeded(_ proxy: ScrollViewProxy) {
-        guard !didRestore else { return }
-        didRestore = true
-        guard let marked = idioms.first(where: { $0.isBookmarked }) else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            proxy.scrollTo(marked.number, anchor: .center)
-        }
-    }
 }

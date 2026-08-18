@@ -16,6 +16,7 @@ struct RootTabView: View {
                 if newValue == 0, selection == 0 {
                     readingReselect += 1
                 }
+                PerfLog.log("tab -> \(newValue)")
                 selection = newValue
             }
         )) {
