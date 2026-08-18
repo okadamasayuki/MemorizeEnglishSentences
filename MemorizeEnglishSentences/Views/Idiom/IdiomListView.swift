@@ -16,7 +16,12 @@ private struct SelectedIdiom: Identifiable {
 /// - 左スワイプでしおり(全体1か所)、右スワイプで削除
 struct IdiomListView: View {
     @Environment(\.modelContext) private var context
-    @Query(sort: \Idiom.number) private var allIdioms: [Idiom]
+    /// 全熟語(番号順)。@Query にすると、このタブを一度開いた後は
+    /// アプリ内のどんな保存(しおり自動保存など)でも1000件を再取得してしまい、
+    /// アプリ全体が遅くなる。表示時に一度だけ手動で読み込む
+    /// (カード内の変化は Observation が行単位で拾うので一覧の再取得は不要。
+    ///  追加取り込みは起動時=読み込み前に終わっている)。
+    @State private var allIdioms: [Idiom] = []
     /// 意味を表示中のカード番号
     @State private var revealed: Set<Int> = []
     /// 選択中の級(セグメント)。未選択時は最初の級
@@ -59,10 +64,24 @@ struct IdiomListView: View {
         allIdioms.filter { $0.level == effectiveLevel }
     }
 
+    /// 読み込みが済んだか(済む前に「まだありません」を出さないため)
+    @State private var didLoad = false
+
+    /// 全熟語を一度だけ読み込む(取り込みは起動時に終わっているので以後の再取得は不要)
+    private func loadIfNeeded() {
+        guard !didLoad else { return }
+        didLoad = true
+        let descriptor = FetchDescriptor<Idiom>(sortBy: [SortDescriptor(\.number)])
+        allIdioms = (try? context.fetch(descriptor)) ?? []
+    }
+
     var body: some View {
         NavigationStack {
             Group {
-                if allIdioms.isEmpty {
+                if !didLoad {
+                    ProgressView()
+                        .onAppear { loadIfNeeded() }
+                } else if allIdioms.isEmpty {
                     ContentUnavailableView(
                         "熟語がまだありません",
                         systemImage: "text.book.closed",
@@ -86,10 +105,11 @@ struct IdiomListView: View {
                                         }
                                         .tint(.orange)
                                     }
-                                    // 右スワイプで削除
+                                    // 右スワイプで削除(手動読み込みの一覧からも取り除く)
                                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                         Button(role: .destructive) {
                                             revealed.remove(idiom.number)
+                                            allIdioms.removeAll { $0.persistentModelID == idiom.persistentModelID }
                                             context.delete(idiom)
                                             try? context.save()
                                         } label: {
