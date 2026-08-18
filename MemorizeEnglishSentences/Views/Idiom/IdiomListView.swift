@@ -65,9 +65,7 @@ struct IdiomListView: View {
 
     /// 表示対象(選択中の級だけ)
     private var idioms: [Idiom] {
-        PerfLog.measure("idioms filter") {
-            allIdioms.filter { $0.level == effectiveLevel }
-        }
+        allIdioms.filter { $0.level == effectiveLevel }
     }
 
     /// 読み込みが済んだか(済む前に「まだありません」を出さないため)
@@ -77,15 +75,12 @@ struct IdiomListView: View {
     private func loadIfNeeded() {
         guard !didLoad else { return }
         didLoad = true
-        PerfLog.measure("idiom fetch") {
-            let descriptor = FetchDescriptor<Idiom>(sortBy: [SortDescriptor(\.number)])
-            allIdioms = (try? context.fetch(descriptor)) ?? []
-            computeLevels()
-        }
+        let descriptor = FetchDescriptor<Idiom>(sortBy: [SortDescriptor(\.number)])
+        allIdioms = (try? context.fetch(descriptor)) ?? []
+        computeLevels()
     }
 
     var body: some View {
-        let _ = PerfLog.log("IdiomListView body")
         NavigationStack {
             Group {
                 if !didLoad {
@@ -137,7 +132,6 @@ struct IdiomListView: View {
                         .contentMargins(.top, 10, for: .scrollContent)
                         .onAppear {
                             scrollProxy = proxy
-                            PerfLog.log("idiom list appeared (\(idioms.count) rows)")
                             restoreBookmarkIfNeeded(proxy)
                         }
                     }

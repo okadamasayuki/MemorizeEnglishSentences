@@ -31,15 +31,8 @@ struct IdiomCardView: View, Equatable {
         idiom.idiomTokenIndexes
     }
 
-    /// 重さ調査用: 何枚のカードが実際に組み立てられたかを数える(原因が取れたら外す)
-    private static var buildCount = 0
-
     var body: some View {
-        Self.buildCount += 1
-        if Self.buildCount % 50 == 0 {
-            PerfLog.log("idiom card builds: \(Self.buildCount)")
-        }
-        return VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 10) {
                 Text(String(idiom.number))
                     .font(.caption2.monospacedDigit())

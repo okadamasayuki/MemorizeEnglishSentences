@@ -16,7 +16,6 @@ struct RootTabView: View {
                 if newValue == 0, selection == 0 {
                     readingReselect += 1
                 }
-                PerfLog.log("tab -> \(newValue)")
                 selection = newValue
             }
         )) {
@@ -39,7 +38,6 @@ struct RootTabView: View {
         // (シミュレーターで切替の重さを自動計測するのに使う)
         .onOpenURL { url in
             if url.host() == "tab", let value = Int(url.lastPathComponent) {
-                PerfLog.log("tab -> \(value) (url)")
                 selection = value
             }
         }
