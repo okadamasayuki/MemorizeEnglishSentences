@@ -152,8 +152,18 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         let start: Double
         let end: Double
         let cumBefore: Double
+        /// 和訳読み上げの窓か(スライダーの合計時間に和訳の分も入れるため)
+        var isJa: Bool = false
+        /// 文頭の和訳(「和訳→英文」順)か
+        var jaLead: Bool = false
     }
     private var windows: [PlayWindow] = []
+    /// 各文の和訳音声の長さ(和訳モードON時のみ計算。0=和訳なし)
+    private var segJaDurations: [Double] = []
+    /// 和訳読み上げの開始時刻(TTS時の進捗推定に使う)
+    private var jaStartedAt: CFAbsoluteTime = 0
+    /// 和訳ファイルの長さのキャッシュ(パス→秒)
+    private static var jaDurationCache: [String: Double] = [:]
     /// ブロック全体を何周するか(現在ブロック)
     private var blockRepeatCount = 1
     /// 何周終えたか(0始まり)
@@ -226,10 +236,15 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         playCurrent()
     }
 
-    /// 「英文→和訳」交互モードの切り替え(再生中でも即反映)
+    /// 「英文→和訳」交互モードの切り替え(再生中でも即反映)。
+    /// スライダーの合計時間も和訳の分を含めて作り直す
     func setJaAfterSentence(_ on: Bool) {
         jaAfterSentence = on
         if !on { cancelJaSpeech(resume: true) }
+        if isPlayingSequence {
+            computeJaDurations()
+            rebuildWindows()
+        }
     }
 
     /// 次のブロックへ(最後まで行ったら終了)
@@ -263,7 +278,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     /// 文の境界を越えて前後の文(繰り返し分を含む)へも移動する。
     func seek(by seconds: Double) {
         guard isPlayingSequence, let player,
-              let w = windows.first(where: { $0.pass == blockPassesDone && $0.seg == curSeg && $0.rep == curRep }) else { return }
+              let w = windows.first(where: { !$0.isJa && $0.pass == blockPassesDone && $0.seg == curSeg && $0.rep == curRep }) else { return }
         let pos = w.cumBefore + max(0, min(player.currentTime - w.start, w.end - w.start))
         seekVirtual(to: pos + seconds)
     }
@@ -295,8 +310,17 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     func seekVirtual(to value: Double) {
         guard isPlayingSequence, let player, !windows.isEmpty else { return }
         cancelJaSpeech()
-        let v = max(0, min(value, progress.duration))
-        let w = windows.last { $0.cumBefore <= v } ?? windows[0]
+        var v = max(0, min(value, progress.duration))
+        var w = windows.last { $0.cumBefore <= v } ?? windows[0]
+        // 和訳の窓に着地したら、直後の英文の窓へ寄せる(シークで和訳の途中には入らない)
+        if w.isJa {
+            if let after = windows.first(where: { !$0.isJa && $0.cumBefore >= w.cumBefore }) {
+                w = after
+            } else if let before = windows.last(where: { !$0.isJa && $0.cumBefore <= w.cumBefore }) {
+                w = before
+            }
+            v = w.cumBefore
+        }
         blockPassesDone = w.pass
         curSeg = w.seg
         curRep = w.rep
@@ -417,16 +441,30 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
             segStarts = segs.enumerated().map { i, s in i == 0 ? 0 : max(0, s.start - 0.05) }
             segCounts = item.repeatCounts
             // 「話し終わり」= 次の文の手前にある無音区間の開始+余韻。
-            // (whisperの単語終了時刻は文間の無音・息継ぎを含むため使わない)
+            // ただし無音検出が文中の弱い語(文末の小さな声など)を「終わり」と誤認して
+            // 最後の単語が切れることがあるため、その文の最終単語の終了時刻より
+            // 手前では絶対に切らない(尻切れ防止)。
             segSpeechEnds = segs.indices.map { i in
                 let segStart = segs[i].start
                 let boundary = i + 1 < segs.count ? segs[i + 1].start : Double.greatestFiniteMagnitude
+                // この文の範囲に含まれる最終単語の終了時刻
+                let segRange = segs[i].range
+                let lastWordEnd = item.words
+                    .filter { $0.range.location >= segRange.location
+                              && $0.range.location < segRange.location + segRange.length }
+                    .map(\.end).max()
                 let gap = item.silences.last { $0.start >= segStart && $0.start <= boundary + 0.1 }
+                var end: Double
                 if let gap {
-                    return gap.start + 0.15
+                    end = gap.start + 0.15
+                } else {
+                    // 無音が見つからない場合: 次の文の0.35秒前で切る(最後の文は末尾まで)
+                    end = boundary == .greatestFiniteMagnitude ? boundary : max(segStart, boundary - 0.35)
                 }
-                // 無音が見つからない場合: 次の文の0.35秒前で切る(最後の文は末尾まで)
-                return boundary == .greatestFiniteMagnitude ? boundary : max(segStart, boundary - 0.35)
+                if let lastWordEnd, end < lastWordEnd + 0.12 {
+                    end = min(lastWordEnd + 0.12, boundary == .greatestFiniteMagnitude ? lastWordEnd + 0.12 : boundary)
+                }
+                return end
             }
             segReplayStarts = segs.map { max(0, $0.start - 0.05) }
         } else {
@@ -436,6 +474,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
             segSpeechEnds = [Double.greatestFiniteMagnitude]
             segReplayStarts = [0]
         }
+        computeJaDurations()
     }
 
     /// i番目以降で回数>0の最初の文
@@ -475,13 +514,33 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         if jaAfterSentence, jaOrderFirst, let ja = jaText(forSegment: seg), !ja.isEmpty {
             jaLeadPending = true
             speakJa(ja)
+            startTimer()  // 和訳中もスライダーを進める
         } else {
             newPlayer.play()
             startTimer()
         }
     }
 
-    /// 文×回数を展開した再生窓の列と合計時間を作る(回数設定を織り込んだ長さになる)
+    /// 各文の和訳音声の長さを求める(和訳モードON時だけ。スライダーの合計時間に使う)
+    private func computeJaDurations() {
+        segJaDurations = []
+        guard jaAfterSentence, items.indices.contains(currentIndex) else { return }
+        let item = items[currentIndex]
+        segJaDurations = (0..<segCounts.count).map { i in
+            guard let ja = jaText(forSegment: i), !ja.isEmpty else { return 0 }
+            if let url = JaAudioStore.url(forBlockText: item.english, segmentIndex: i) {
+                if let cached = Self.jaDurationCache[url.path] { return cached }
+                let d = (try? AVAudioPlayer(contentsOf: url))?.duration ?? 0
+                Self.jaDurationCache[url.path] = d
+                return d
+            }
+            // TTSフォールバック分は文字数からおおよその長さを見積もる
+            return Double(ja.count) * 0.135 + 0.3
+        }
+    }
+
+    /// 文×回数を展開した再生窓の列と合計時間を作る(回数設定を織り込んだ長さになる)。
+    /// 和訳モードON時は和訳読み上げの窓も挟み、スライダーに和訳の時間も加味する
     private func rebuildWindows() {
         windows = []
         guard let player else {
@@ -491,8 +550,17 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         let dur = player.duration
         let lastScheduled = (0..<segCounts.count).last { segCounts[$0] > 0 }
         var cum = 0.0
+        let jaOn = jaAfterSentence
+        let jaLeadMode = jaOrderFirst
         for pass in 0..<blockRepeatCount {
             for i in 0..<segCounts.count where segCounts[i] > 0 {
+                let jaDur = (jaOn && segJaDurations.indices.contains(i)) ? segJaDurations[i] : 0
+                // 「和訳→英文」順: 文頭に和訳の窓
+                if jaDur > 0, jaLeadMode {
+                    windows.append(PlayWindow(pass: pass, seg: i, rep: 0, start: 0, end: jaDur,
+                                              cumBefore: cum, isJa: true, jaLead: true))
+                    cum += jaDur
+                }
                 for r in 0..<segCounts[i] {
                     // 各周の最後の窓はファイル末尾まで(自然な間を保つ)
                     let isPassLast = (i == lastScheduled && r == segCounts[i] - 1)
@@ -502,6 +570,12 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
                     windows.append(PlayWindow(pass: pass, seg: i, rep: r, start: start, end: end, cumBefore: cum))
                     cum += end - start
                 }
+                // 「英文→和訳」順: 文末に和訳の窓
+                if jaDur > 0, !jaLeadMode {
+                    windows.append(PlayWindow(pass: pass, seg: i, rep: max(0, segCounts[i] - 1), start: 0, end: jaDur,
+                                              cumBefore: cum, isJa: true, jaLead: false))
+                    cum += jaDur
+                }
             }
         }
         progress.duration = cum
@@ -509,8 +583,24 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
 
     /// 仮想タイムライン上の現在位置を更新する(変化が小さい時は publish しない)
     private func updateProgress(player: AVAudioPlayer) {
-        guard let w = windows.first(where: { $0.pass == blockPassesDone && $0.seg == curSeg && $0.rep == curRep }) else { return }
+        guard let w = windows.first(where: { !$0.isJa && $0.pass == blockPassesDone && $0.seg == curSeg && $0.rep == curRep }) else { return }
         let pos = w.cumBefore + max(0, min(player.currentTime - w.start, w.end - w.start))
+        if abs(pos - progress.position) > 0.15 {
+            progress.position = pos
+        }
+    }
+
+    /// 和訳読み上げ中のスライダー位置を更新する
+    private func updateJaProgress() {
+        guard let w = windows.first(where: { $0.isJa && $0.pass == blockPassesDone && $0.seg == curSeg && $0.jaLead == jaLeadPending }) else { return }
+        let elapsed: Double
+        if let jaPlayer {
+            elapsed = jaPlayer.currentTime
+        } else {
+            // TTSは実位置が取れないため経過時間で近似する
+            elapsed = CFAbsoluteTimeGetCurrent() - jaStartedAt
+        }
+        let pos = w.cumBefore + max(0, min(elapsed, w.end - w.start))
         if abs(pos - progress.position) > 0.15 {
             progress.position = pos
         }
@@ -524,6 +614,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     /// この文の和訳を読み上げる。事前生成音声(VOICEVOX)があればそれを再生し、無い文だけTTSで読む
     private func speakJa(_ ja: String) {
         isSpeakingJa = true
+        jaStartedAt = CFAbsoluteTimeGetCurrent()
         if items.indices.contains(currentIndex),
            let url = JaAudioStore.url(forBlockText: items[currentIndex].english, segmentIndex: curSeg),
            let filePlayer = try? AVAudioPlayer(contentsOf: url) {
@@ -555,8 +646,8 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         // (「和訳→英文」順のときは文の頭で読み上げ済みなので、ここでは読まない)
         if jaAfterSentence, !jaOrderFirst, !isSpeakingJa, !force, let ja = jaText(forSegment: curSeg), !ja.isEmpty {
             player.pause()
-            stopTimer()
             speakJa(ja)
+            if timer == nil { startTimer() }  // 和訳中もスライダーを進める
             return
         }
         advanceToNextScheduled()
@@ -569,10 +660,10 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         curRep = 0
         if jaAfterSentence, jaOrderFirst, !isSpeakingJa, let ja = jaText(forSegment: seg), !ja.isEmpty {
             player.pause()
-            stopTimer()
             highlight.range = nil
             jaLeadPending = true
             speakJa(ja)
+            if timer == nil { startTimer() }  // 和訳中もスライダーを進める
             return
         }
         let from = segReplayStarts.indices.contains(seg) ? segReplayStarts[seg] : segStarts[seg]
@@ -660,7 +751,13 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
 
     /// 毎tick: 文の終端に達したら次へ、そうでなければ単語ハイライトを更新
     private func tick() {
-        guard let player, isPlayingSequence, !isPaused else { return }
+        guard isPlayingSequence, !isPaused else { return }
+        // 和訳の読み上げ中もスライダーを進める(合計時間に和訳の分が入っているため)
+        if isSpeakingJa {
+            updateJaProgress()
+            return
+        }
+        guard let player else { return }
         // 文の終わりは常に「話し終わり(+余韻)」で切り、文間の息継ぎ・間は再生しない。
         // ただしブロック最終文の最後の1回だけはファイル末尾まで自然に流す
         // (ブロック間の間はそのまま保つ)。
