@@ -254,28 +254,12 @@ struct AudioPlayerView: View {
                                         .multilineTextAlignment(.leading)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                // 英文。切れ目報告の丸は「1行目の左=文頭」「最終行の右=文末」に行揃えで置く
-                                HStack(alignment: .lastTextBaseline, spacing: 6) {
-                                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                        if isCurrent {
-                                            reportDot(reported: reportedHeads.contains(i)) {
-                                                reportedHeads.insert(i)
-                                                reportSegmentIssue(seg: seg, index: i, part: "文頭")
-                                            }
-                                        }
-                                        AudioSegmentHighlightView(text: seg.en, segmentRange: seg.range,
-                                                                  highlight: isCurrent ? audio.highlight : Self.idleHighlight)
-                                            .font(.title3.weight(.medium))
-                                            .multilineTextAlignment(.leading)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                    if isCurrent {
-                                        reportDot(reported: reportedTails.contains(i)) {
-                                            reportedTails.insert(i)
-                                            reportSegmentIssue(seg: seg, index: i, part: "文末")
-                                        }
-                                    }
-                                }
+                                // 英文は常に全幅で表示する(報告の丸は右側の×Nの上下に置く)
+                                AudioSegmentHighlightView(text: seg.en, segmentRange: seg.range,
+                                                          highlight: isCurrent ? audio.highlight : Self.idleHighlight)
+                                    .font(.title3.weight(.medium))
+                                    .multilineTextAlignment(.leading)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                                 if !jaFirst, !seg.ja.isEmpty {
                                     Text(seg.ja)
                                         .font(.subheadline)
@@ -304,21 +288,33 @@ struct AudioPlayerView: View {
                             // この文の再生回数(記憶される)。×3は廃止し、タップで ×1↔×2。
                             // 表示中のページだけに出す(スワイプ途中の隣ページには出さない)
                             if isCurrent {
-                                Button {
-                                    setCount(i, countFor(i) == 1 ? 2 : 1)
-                                } label: {
-                                    Text("×\(countFor(i))")
-                                        .font(.footnote.weight(.semibold).monospacedDigit())
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 5)
-                                        .background(
-                                            Capsule().fill(countFor(i) > 1 ? Color.accentColor
-                                                                           : Color(.secondarySystemBackground))
-                                        )
-                                        .foregroundStyle(countFor(i) > 1 ? Color.white
-                                                         : (countFor(i) == 0 ? Color.secondary : Color.primary))
+                                VStack(spacing: 8) {
+                                    // 上の丸=文頭が変(押すと赤くなり改善タブへ自動追加)
+                                    reportLabeledDot("頭", reported: reportedHeads.contains(i)) {
+                                        reportedHeads.insert(i)
+                                        reportSegmentIssue(seg: seg, index: i, part: "文頭")
+                                    }
+                                    Button {
+                                        setCount(i, countFor(i) == 1 ? 2 : 1)
+                                    } label: {
+                                        Text("×\(countFor(i))")
+                                            .font(.footnote.weight(.semibold).monospacedDigit())
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 5)
+                                            .background(
+                                                Capsule().fill(countFor(i) > 1 ? Color.accentColor
+                                                                               : Color(.secondarySystemBackground))
+                                            )
+                                            .foregroundStyle(countFor(i) > 1 ? Color.white
+                                                             : (countFor(i) == 0 ? Color.secondary : Color.primary))
+                                    }
+                                    .buttonStyle(.plain)
+                                    // 下の丸=文末が変
+                                    reportLabeledDot("末", reported: reportedTails.contains(i)) {
+                                        reportedTails.insert(i)
+                                        reportSegmentIssue(seg: seg, index: i, part: "文末")
+                                    }
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -388,13 +384,15 @@ struct AudioPlayerView: View {
         audio.updateGlobalBlockRepeat(n)
     }
 
-    /// 「切れ目が変」のワンタップ報告ボタン(押すと赤くなる)
-    private func reportDot(reported: Bool, action: @escaping () -> Void) -> some View {
+    /// 「切れ目が変」のワンタップ報告ボタン(頭/末のラベル入り。押すと赤くなる)
+    private func reportLabeledDot(_ label: String, reported: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: reported ? "circle.fill" : "circle")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(reported ? Color.red : Color(.systemGray3))
-                .frame(width: 26, height: 26)
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(reported ? Color.white : Color.secondary)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(reported ? Color.red : Color(.secondarySystemBackground)))
+                .overlay(Circle().stroke(reported ? Color.red : Color(.systemGray3), lineWidth: 1))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
