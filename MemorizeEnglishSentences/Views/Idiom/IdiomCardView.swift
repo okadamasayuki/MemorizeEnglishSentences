@@ -9,8 +9,6 @@ struct IdiomCardView: View, Equatable {
     let onToggle: () -> Void
     /// 長押しされたトークン(語, ブロック内の同語の出現番号, 熟語部分か)
     let onWordTap: (String, Int, Bool) -> Void
-    /// 例文の読み上げ
-    let onSpeak: () -> Void
     /// 元スクショの表示(対応する画像があるときだけ渡す)
     var onShowSource: (() -> Void)? = nil
 
@@ -33,39 +31,7 @@ struct IdiomCardView: View, Equatable {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 10) {
-                Text(String(idiom.number))
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button {
-                    onSpeak()
-                } label: {
-                    Image(systemName: "speaker.wave.2")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.accentColor)
-                        .frame(width: 22, height: 22)
-                }
-                .buttonStyle(.borderless)
-                if let onShowSource {
-                    Button {
-                        onShowSource()
-                    } label: {
-                        Image(systemName: "photo")
-                            .font(.subheadline)
-                            .foregroundStyle(Color.accentColor)
-                            .frame(width: 22, height: 22)
-                    }
-                    .buttonStyle(.borderless)
-                }
-                if idiom.isBookmarked {
-                    Image(systemName: "bookmark.fill")
-                        .font(.subheadline)
-                        .foregroundStyle(.orange)
-                        .frame(width: 22, height: 22)
-                }
-            }
-
+            // 番号行は廃止(縦の幅を取らない)。写真としおりは右上に重ねて表示する
             // 例文(熟語部分を強調)。単語長押しで意味を表示
             FlowLayout(spacing: 4, lineSpacing: 7) {
                 ForEach(tokens) { token in
@@ -80,6 +46,8 @@ struct IdiomCardView: View, Equatable {
                         }
                 }
             }
+            // 右上のアイコンと最初の行が重ならないよう、少しだけ右に余白を取る
+            .padding(.trailing, (onShowSource != nil || idiom.isBookmarked) ? 30 : 0)
 
             if isRevealed {
                 Divider()
@@ -110,6 +78,29 @@ struct IdiomCardView: View, Equatable {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(.secondarySystemBackground))
         )
+        // 写真としおりは右上に重ねる(専用の行を作って縦幅を取らない)
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 6) {
+                if let onShowSource {
+                    Button {
+                        onShowSource()
+                    } label: {
+                        Image(systemName: "photo")
+                            .font(.footnote)
+                            .foregroundStyle(Color.accentColor)
+                            .frame(width: 22, height: 22)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                if idiom.isBookmarked {
+                    Image(systemName: "bookmark.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .frame(width: 22, height: 22)
+                }
+            }
+            .padding(6)
+        }
         .contentShape(RoundedRectangle(cornerRadius: 12))
         .onTapGesture {
             onToggle()

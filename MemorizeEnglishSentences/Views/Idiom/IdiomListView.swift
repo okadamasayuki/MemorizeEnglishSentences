@@ -225,7 +225,6 @@ struct IdiomListView: View {
                     showWord(word, occurrence: occurrence, sentenceContext: idiom.example)
                 }
             },
-            onSpeak: { SpeechSynthesisService.shared.speak(idiom.example) },
             onShowSource: PageImageStore.hasImage(forBlockText: idiom.example)
                 ? { sourceImage = PageImageStore.image(forBlockText: idiom.example).map(IdentifiableImage.init) }
                 : nil

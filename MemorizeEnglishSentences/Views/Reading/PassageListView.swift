@@ -273,7 +273,8 @@ struct PassageListView: View {
             .fullScreenCover(isPresented: $showPlayer) {
                 SentencePlayerView(items: playerItems)
             }
-            .fullScreenCover(isPresented: $showAudioPlayer) {
+            // sheetにすることで「下スワイプで閉じる=再生は続けてミニプレイヤーへ」ができる
+            .sheet(isPresented: $showAudioPlayer) {
                 AudioPlayerView()
             }
             .sheet(item: $selectedWord) { selected in

@@ -191,8 +191,9 @@ struct RecallListView: View {
             .fullScreenCover(isPresented: $showPlayer) {
                 SentencePlayerView(items: playerItems)
             }
-            // 事前生成音声のプレイヤー(音読タブと同じ画面)
-            .fullScreenCover(isPresented: $showAudioPlayer) {
+            // 事前生成音声のプレイヤー(音読タブと同じ画面)。
+            // sheetにすることで「下スワイプで閉じる=再生は続けてミニプレイヤーへ」ができる
+            .sheet(isPresented: $showAudioPlayer) {
                 AudioPlayerView()
             }
             // 暗記セッションに入る時などは連続再生を止める

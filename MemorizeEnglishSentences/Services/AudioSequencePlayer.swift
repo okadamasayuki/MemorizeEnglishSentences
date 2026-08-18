@@ -121,6 +121,8 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     @Published var isPaused = false
     /// 今読んでいるブロックの番号(0始まり)
     @Published var sequenceIndex: Int?
+    /// 今読んでいる文(ミニプレイヤーの表示用。文の切り替わり時だけ更新)
+    @Published var currentSentence: String?
 
     private var items: [AudioPlaybackItem] = []
     private var currentIndex = 0
@@ -324,6 +326,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         blockPassesDone = w.pass
         curSeg = w.seg
         curRep = w.rep
+        publishCurrentSentence()
         player.currentTime = min(w.start + (v - w.cumBefore), max(w.start, w.end - 0.05))
         lastWordIndex = -1
         highlight.range = nil
@@ -397,6 +400,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         isPlayingSequence = false
         isPaused = false
         sequenceIndex = nil
+        currentSentence = nil
         highlight.range = nil
         items = []
         currentIndex = 0
@@ -505,6 +509,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         newPlayer.prepareToPlay()
         curSeg = seg
         curRep = 0
+        publishCurrentSentence()
         newPlayer.currentTime = segStarts[seg]
         player = newPlayer
         isPaused = false
@@ -658,6 +663,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         guard let player else { return }
         curSeg = seg
         curRep = 0
+        publishCurrentSentence()
         if jaAfterSentence, jaOrderFirst, !isSpeakingJa, let ja = jaText(forSegment: seg), !ja.isEmpty {
             player.pause()
             highlight.range = nil
@@ -686,6 +692,22 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         // 次のブロックへ
         currentIndex += 1
         playCurrent()
+    }
+
+    /// ミニプレイヤー用に「今読んでいる文」を更新する(文が変わった時だけ publish)
+    private func publishCurrentSentence() {
+        guard items.indices.contains(currentIndex) else {
+            if currentSentence != nil { currentSentence = nil }
+            return
+        }
+        let item = items[currentIndex]
+        let text: String
+        if let segs = item.segments, segs.indices.contains(curSeg) {
+            text = segs[curSeg].en
+        } else {
+            text = item.english
+        }
+        if currentSentence != text { currentSentence = text }
     }
 
     /// この文の和訳(文ペアがあればその文の和訳、無いブロックは全訳)

@@ -7,6 +7,10 @@ struct RootTabView: View {
     @State private var selection = 0
     /// 音読タブが再タップされた回数(前回位置に戻すシグナル)
     @State private var readingReselect = 0
+    /// 教材音声が再生中か(ミニプレイヤーの表示判定)
+    @State private var audioActive = false
+    /// ミニプレイヤーから全画面プレイヤーを開いているか
+    @State private var showFullPlayerFromMini = false
 
     var body: some View {
         TabView(selection: Binding(
@@ -32,6 +36,21 @@ struct RootTabView: View {
             // アプリへの改善要望を書き留めて、Mac の Claude Code へ送るタブ
             Tab("改善", systemImage: "lightbulb", value: 4) {
                 ImprovementListView()
+            }
+        }
+        // 教材音声の再生中は、どのタブでも下部にミニプレイヤーを出す
+        // (プレイヤーを下スワイプで閉じても再生は続き、ここから戻れる)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if audioActive {
+                MiniPlayerBar { showFullPlayerFromMini = true }
+            }
+        }
+        .sheet(isPresented: $showFullPlayerFromMini) {
+            AudioPlayerView()
+        }
+        .onReceive(AudioSequencePlayer.shared.$isPlayingSequence) { playing in
+            if audioActive != playing {
+                withAnimation(.easeInOut(duration: 0.2)) { audioActive = playing }
             }
         }
         // 動作検証用: memoeng://tab/3 のようなURLでタブを切り替えられる
