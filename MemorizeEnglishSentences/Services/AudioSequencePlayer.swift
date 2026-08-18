@@ -293,20 +293,18 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     func playSegment(_ i: Int) {
         guard isPlayingSequence, let player, segStarts.indices.contains(i) else { return }
         cancelJaSpeech()
-        if let w = windows.first(where: { $0.pass == blockPassesDone && $0.seg == i && $0.rep == 0 })
-            ?? windows.first(where: { $0.seg == i }) {
-            seekVirtual(to: w.cumBefore)
-        } else {
-            // ×0でスケジュール外の文: その場から1回だけ流す(読み終えたら次の予定文へ)
-            curSeg = i
-            curRep = 0
-            player.currentTime = segReplayStarts.indices.contains(i) ? segReplayStarts[i] : segStarts[i]
-            lastWordIndex = -1
-            highlight.range = nil
+        isPaused = false
+        // 進捗表示をこの文の頭に合わせる
+        if let w = windows.first(where: { !$0.isJa && $0.pass == blockPassesDone && $0.seg == i && $0.rep == 0 })
+            ?? windows.first(where: { !$0.isJa && $0.seg == i }) {
+            blockPassesDone = w.pass
+            progress.position = w.cumBefore
         }
-        if isPaused {
-            resume()
-        } else if !player.isPlaying {
+        lastWordIndex = -1
+        highlight.range = nil
+        // 「和訳→英語」順ならダブルタップでもその文の和訳から読む(通常の文送りと同じ経路)
+        beginSegment(i)
+        if !isSpeakingJa, !player.isPlaying {
             player.play()
             if timer == nil { startTimer() }
         }
