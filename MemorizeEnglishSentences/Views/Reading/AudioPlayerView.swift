@@ -45,7 +45,8 @@ struct AudioPlayerView: View {
                         .foregroundStyle(Color.primary)
                 }
                 .buttonStyle(.plain)
-                // 各英文の後にその文の和訳を読み上げるモード
+                // 各英文の後にその文の和訳を読み上げるモード。
+                // 長押しで和訳の「声」を切り替えられる(比較用。記憶される)
                 Button {
                     jaAfterSentence.toggle()
                     audio.setJaAfterSentence(jaAfterSentence)
@@ -59,6 +60,19 @@ struct AudioPlayerView: View {
                         .foregroundStyle(jaAfterSentence ? Color.white : Color.primary)
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    ForEach(JaAudioStore.voices, id: \.id) { voice in
+                        Button {
+                            JaAudioStore.selectedVariant = voice.id
+                        } label: {
+                            if JaAudioStore.selectedVariant == voice.id {
+                                Label(voice.name, systemImage: "checkmark")
+                            } else {
+                                Text(voice.name)
+                            }
+                        }
+                    }
+                }
                 // ブロック全体(文ごとの一式)を何回再生するか(全項目共通)。
                 // ×3は使わないため廃止し、タップで ×1↔×2 を切り替える
                 Button {
