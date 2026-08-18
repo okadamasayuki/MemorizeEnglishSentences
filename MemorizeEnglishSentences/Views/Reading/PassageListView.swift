@@ -293,6 +293,14 @@ struct PassageListView: View {
                 try? await Task.sleep(for: .seconds(0.35))
                 guard !Task.isCancelled else { return }
                 persistBookmark()
+                // しおりが次の項目へ移ったら、前の項目の和訳表示は自動で閉じる
+                // (開いたままだと読み終えた訳が並んで邪魔になるため。今の項目の分だけ残す)
+                if let id = currentBlockID {
+                    let keep = expandedBlockIDs.intersection([id])
+                    if keep != expandedBlockIDs {
+                        withAnimation(.easeInOut(duration: 0.2)) { expandedBlockIDs = keep }
+                    }
+                }
             }
             // 単語の翻訳(常駐セッション 1 本に、タップされた単語をストリームで流し込む)
             .translationTask(wordConfiguration) { session in
