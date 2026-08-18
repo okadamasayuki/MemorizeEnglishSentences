@@ -100,7 +100,7 @@ struct AudioPlayerView: View {
                 }
             }
             .padding(.horizontal)
-            .padding(.top, 12)
+            .padding(.top, 26)
 
             // いま読んでいるブロック。暗記タブと同じページめくり(指に追従)で
             // 左右スワイプすると前後の項目へ移動し、その項目の頭から再生される。
@@ -184,7 +184,7 @@ struct AudioPlayerView: View {
                 }
                 .buttonStyle(.bordered)
             }
-            .padding(.bottom, 24)
+            .padding(.bottom, 6)
         }
         // RWJ風の動画っぽい表示(プロトタイプ)。音声はそのまま流れ続ける
         .fullScreenCover(isPresented: $showKinetic) {

@@ -9,29 +9,28 @@ struct MiniPlayerBar: View {
     let onOpen: () -> Void
 
     var body: some View {
+        // tabViewBottomAccessory(タブバーの上の帯)に入るため、背景は持たずコンパクトに
         HStack(spacing: 10) {
-            // 今読んでいる文(なければ項目番号)
-            VStack(alignment: .leading, spacing: 2) {
-                if let idx = audio.sequenceIndex {
-                    Text("\(idx + 1) / \(audio.itemCount)")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-                Text(audio.currentSentence ?? "再生中")
-                    .font(.footnote)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+            if let idx = audio.sequenceIndex {
+                Text("\(idx + 1)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // 今読んでいる文
+            Text(audio.currentSentence ?? "再生中")
+                .font(.footnote)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             // 一時停止 / 再開
             Button {
                 if audio.isPaused { audio.resume() } else { audio.pause() }
             } label: {
                 Image(systemName: audio.isPaused ? "play.fill" : "pause.fill")
-                    .font(.title3)
+                    .font(.body)
                     .foregroundStyle(Color.accentColor)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 32, height: 32)
             }
             .buttonStyle(.plain)
 
@@ -40,21 +39,13 @@ struct MiniPlayerBar: View {
                 audio.stop()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 30, height: 34)
+                    .frame(width: 28, height: 32)
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color(.separator), lineWidth: 0.5)
-        )
         .padding(.horizontal, 12)
-        .padding(.bottom, 4)
         .contentShape(Rectangle())
         .onTapGesture { onOpen() }
     }

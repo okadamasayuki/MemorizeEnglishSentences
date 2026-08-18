@@ -13,36 +13,19 @@ struct RootTabView: View {
     @State private var showFullPlayerFromMini = false
 
     var body: some View {
-        TabView(selection: Binding(
-            get: { selection },
-            set: { newValue in
-                // すでに音読タブにいる状態で音読タブを再タップした
-                if newValue == 0, selection == 0 {
-                    readingReselect += 1
-                }
-                selection = newValue
-            }
-        )) {
-            Tab("音読", systemImage: "book.fill", value: 0) {
-                PassageListView(reselectSignal: readingReselect)
-            }
-            // 例文を音読しながら熟語を覚えるタブ
-            Tab("熟語", systemImage: "text.book.closed.fill", value: 3) {
-                IdiomListView()
-            }
-            Tab("暗記", systemImage: "brain.fill", value: 1) {
-                RecallListView()
-            }
-            // アプリへの改善要望を書き留めて、Mac の Claude Code へ送るタブ
-            Tab("改善", systemImage: "lightbulb", value: 4) {
-                ImprovementListView()
-            }
-        }
         // 教材音声の再生中は、どのタブでも下部にミニプレイヤーを出す
-        // (プレイヤーを下スワイプで閉じても再生は続き、ここから戻れる)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if audioActive {
-                MiniPlayerBar { showFullPlayerFromMini = true }
+        // (プレイヤーを下スワイプで閉じても再生は続き、ここから戻れる)。
+        // safeAreaInset だとタブバーに重なって押せなくなるため、
+        // タブバーの上に載せる専用API(tabViewBottomAccessory, iOS 26)を使う
+        Group {
+            if #available(iOS 26.0, *) {
+                tabs.tabViewBottomAccessory {
+                    if audioActive {
+                        MiniPlayerBar { showFullPlayerFromMini = true }
+                    }
+                }
+            } else {
+                tabs
             }
         }
         .sheet(isPresented: $showFullPlayerFromMini) {
@@ -94,6 +77,35 @@ struct RootTabView: View {
                 MacBridge.exportIdioms(context: bg)
                 // 学習状態のバックアップ(万一の消失時に復元するための保険)
                 MacBridge.exportLearningState(context: bg)
+            }
+        }
+    }
+
+    /// タブ本体(ミニプレイヤーの載せ方がOSで分かれるため body から分離)
+    private var tabs: some View {
+        TabView(selection: Binding(
+            get: { selection },
+            set: { newValue in
+                // すでに音読タブにいる状態で音読タブを再タップした
+                if newValue == 0, selection == 0 {
+                    readingReselect += 1
+                }
+                selection = newValue
+            }
+        )) {
+            Tab("音読", systemImage: "book.fill", value: 0) {
+                PassageListView(reselectSignal: readingReselect)
+            }
+            // 例文を音読しながら熟語を覚えるタブ
+            Tab("熟語", systemImage: "text.book.closed.fill", value: 3) {
+                IdiomListView()
+            }
+            Tab("暗記", systemImage: "brain.fill", value: 1) {
+                RecallListView()
+            }
+            // アプリへの改善要望を書き留めて、Mac の Claude Code へ送るタブ
+            Tab("改善", systemImage: "lightbulb", value: 4) {
+                ImprovementListView()
             }
         }
     }
