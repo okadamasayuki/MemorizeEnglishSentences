@@ -11,6 +11,8 @@ struct MiniPlayerHost: ViewModifier {
         content
             .safeAreaInset(edge: .bottom, spacing: 6) {
                 if active {
+                    // タブを行き来した時に下からせり上がって見えないよう、
+                    // 出現・消滅はアニメーションなしの即時表示にする
                     MiniPlayerBar { showFullPlayer = true }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
@@ -20,16 +22,13 @@ struct MiniPlayerHost: ViewModifier {
                                 .stroke(Color(.separator), lineWidth: 0.5)
                         )
                         .padding(.horizontal, 12)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .sheet(isPresented: $showFullPlayer) {
                 AudioPlayerView()
             }
             .onReceive(AudioSequencePlayer.shared.$isPlayingSequence) { playing in
-                if active != playing {
-                    withAnimation(.easeInOut(duration: 0.2)) { active = playing }
-                }
+                if active != playing { active = playing }
             }
     }
 }
