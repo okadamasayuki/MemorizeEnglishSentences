@@ -241,11 +241,28 @@ struct AudioPlayerView: View {
                                         .multilineTextAlignment(.leading)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                AudioSegmentHighlightView(text: seg.en, segmentRange: seg.range,
-                                                          highlight: isCurrent ? audio.highlight : Self.idleHighlight)
-                                    .font(.title3.weight(.medium))
-                                    .multilineTextAlignment(.leading)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                // 英文。切れ目報告の丸は「1行目の左=文頭」「最終行の右=文末」に行揃えで置く
+                                HStack(alignment: .lastTextBaseline, spacing: 6) {
+                                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                        if isCurrent {
+                                            reportDot(reported: reportedHeads.contains(i)) {
+                                                reportedHeads.insert(i)
+                                                reportSegmentIssue(seg: seg, index: i, part: "文頭")
+                                            }
+                                        }
+                                        AudioSegmentHighlightView(text: seg.en, segmentRange: seg.range,
+                                                                  highlight: isCurrent ? audio.highlight : Self.idleHighlight)
+                                            .font(.title3.weight(.medium))
+                                            .multilineTextAlignment(.leading)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    if isCurrent {
+                                        reportDot(reported: reportedTails.contains(i)) {
+                                            reportedTails.insert(i)
+                                            reportSegmentIssue(seg: seg, index: i, part: "文末")
+                                        }
+                                    }
+                                }
                                 if !jaFirst, !seg.ja.isEmpty {
                                     Text(seg.ja)
                                         .font(.subheadline)
@@ -266,25 +283,6 @@ struct AudioPlayerView: View {
                                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                     jaFirst.toggle()
-                                }
-                            }
-                            // 文頭・文末の「切れ目が変」ワンタップ報告(押すと赤くなり改善タブへ自動追加)
-                            .overlay(alignment: .topLeading) {
-                                if isCurrent {
-                                    reportDot(reported: reportedHeads.contains(i)) {
-                                        reportedHeads.insert(i)
-                                        reportSegmentIssue(seg: seg, index: i, part: "文頭")
-                                    }
-                                    .offset(x: -22, y: jaFirst && !seg.ja.isEmpty ? 24 : 2)
-                                }
-                            }
-                            .overlay(alignment: .bottomTrailing) {
-                                if isCurrent {
-                                    reportDot(reported: reportedTails.contains(i)) {
-                                        reportedTails.insert(i)
-                                        reportSegmentIssue(seg: seg, index: i, part: "文末")
-                                    }
-                                    .offset(x: 6, y: !jaFirst && !seg.ja.isEmpty ? -24 : -2)
                                 }
                             }
                             // ×0は薄く表示(スキップされる文)
