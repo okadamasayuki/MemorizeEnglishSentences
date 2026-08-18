@@ -126,23 +126,38 @@ enum SentencePairLookup {
         let ja: String
     }
 
+    /// 一覧のスクロール中に同じブロックを何度も引くため、結果(無し=nilも)をメモしておく。
+    /// SwiftData の fetch + JSON デコードが描画のたびに走るとカクつく。
+    private static var memo: [String: [Pair]?] = [:]
+
+    /// Mac からペアを取り込み直した時に呼ぶ(古い結果を捨てる)
+    static func invalidateCache() {
+        memo.removeAll()
+    }
+
     /// ブロック英文のハッシュをキーに、文ごとのペアを引く。無ければ nil。
     static func cached(blockText: String, modelContext: ModelContext) -> [Pair]? {
         let normalized = blockText.trimmingCharacters(in: .whitespacesAndNewlines)
         let digest = SHA256.hash(data: Data(normalized.utf8))
         let key = digest.map { String(format: "%02x", $0) }.joined().prefix(16)
         let target = String(key)
+        if let hit = memo[target] { return hit }
         let descriptor = FetchDescriptor<SentencePairCacheEntry>(
             predicate: #Predicate { $0.key == target }
         )
         guard let entry = try? modelContext.fetch(descriptor).first,
               let data = entry.pairsJSON.data(using: .utf8),
-              let raw = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] else { return nil }
+              let raw = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] else {
+            memo[target] = .some(nil)
+            return nil
+        }
         let pairs = raw.compactMap { dict -> Pair? in
             guard let en = dict["en"], let ja = dict["ja"] else { return nil }
             return Pair(en: en, ja: ja)
         }
-        return pairs.isEmpty ? nil : pairs
+        let result = pairs.isEmpty ? nil : pairs
+        memo[target] = result
+        return result
     }
 }
 

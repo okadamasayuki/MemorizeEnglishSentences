@@ -352,6 +352,39 @@ enum SampleData {
         UserDefaults.standard.set(true, forKey: key)
     }
 
+    /// 熟語タブを廃止したので、熟語データ(Idiom)を一度だけ全削除する。
+    /// 音読・暗記とはリレーションがない独立データなので、他タブには影響しない。
+    /// (Idiom の @Model 定義自体は、スキーマ互換のため削除しない)
+    /// 単語タブを廃止したので、単語データ(VocabWord)を一度だけ全削除する。
+    /// 音読・暗記とはリレーションがない独立データなので、他タブには影響しない。
+    static func removeVocabIfNeeded(context: ModelContext) {
+        let key = "didRemoveVocab_v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let descriptor = FetchDescriptor<VocabWord>()
+        if let words = try? context.fetch(descriptor) {
+            for word in words {
+                context.delete(word)
+            }
+            try? context.save()
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
+    /// 履歴タブを廃止したので、調べた単語の履歴(LookedUpWord)を一度だけ全削除する。
+    /// 他タブとはリレーションがない独立データなので、他タブには影響しない。
+    static func removeLookupHistoryIfNeeded(context: ModelContext) {
+        let key = "didRemoveLookupHistory_v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let descriptor = FetchDescriptor<LookedUpWord>()
+        if let words = try? context.fetch(descriptor) {
+            for word in words {
+                context.delete(word)
+            }
+            try? context.save()
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     /// 音読と暗記のデータを独立させたときの一度きりの移行処理。
     /// それまで両タブで共有していた文章を暗記側にも複製し、暗記の記録は暗記側へ移す。
     static func splitReadingAndRecallIfNeeded(context: ModelContext) {

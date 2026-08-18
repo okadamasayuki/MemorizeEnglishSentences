@@ -6,6 +6,8 @@ import UIKit
 /// Claude Code が page_images フォルダ(manifest.json + <ページ番号>.jpg)を端末へ直接投入する。
 enum PageImageStore {
     private static var manifestCache: [String: String]?
+    /// ブロック英文→ハッシュのメモ(スクロール中に毎描画で SHA256 を計算しないため)
+    private static var keyCache: [String: String] = [:]
 
     private static var dir: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -25,9 +27,13 @@ enum PageImageStore {
     }
 
     private static func key(forBlockText text: String) -> String {
+        if let hit = keyCache[text] { return hit }
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let digest = SHA256.hash(data: Data(normalized.utf8))
-        return String(digest.map { String(format: "%02x", $0) }.joined().prefix(16))
+        let key = String(digest.map { String(format: "%02x", $0) }.joined().prefix(16))
+        if keyCache.count > 8000 { keyCache.removeAll(keepingCapacity: true) }
+        keyCache[text] = key
+        return key
     }
 
     /// このブロックに対応する元スクショがあるか

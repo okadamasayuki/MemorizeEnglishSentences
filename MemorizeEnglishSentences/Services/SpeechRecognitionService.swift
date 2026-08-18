@@ -28,8 +28,13 @@ final class SpeechRecognitionService {
     /// 認識バイアス用の語句(暗記では正解英文の単語を渡して、正解に寄せて聞き取る)
     var contextualStrings: [String] = []
 
-    private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    private let recognizer: SFSpeechRecognizer?
     private let audioEngine = AVAudioEngine()
+
+    /// 既定は英語 (en-US)。改善メモの書き取りなど日本語がほしい画面は ja-JP を渡す
+    init(locale: Locale = Locale(identifier: "en-US")) {
+        recognizer = SFSpeechRecognizer(locale: locale)
+    }
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
 

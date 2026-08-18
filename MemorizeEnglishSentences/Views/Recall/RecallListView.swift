@@ -11,13 +11,51 @@ struct RecallListView: View {
         filter: #Predicate<Passage> { $0.purposeRaw == "recall" },
         sort: sortOrder
     ) private var passages: [Passage]
-    @State private var showingAdd = false
     @State private var path: [Passage] = []
     /// 覚えた!を一覧から隠す(アプリを閉じても記憶する)
     @AppStorage("hideMemorized") private var hideMemorized = false
+    /// 連続再生の状態。@ObservedObject にすると再生中の状態更新のたびに
+    /// 一覧全体が再描画されて重くなるため、必要な変化だけ onReceive で拾う
+    private var speech: SpeechSynthesisService { .shared }
+    /// 連続再生中か(ツールバーの表示切り替え用)
+    @State private var isPlayingSequence = false
+    /// 連続再生プレイヤーの表示
+    @State private var showPlayer = false
+    /// 連続再生中の英文・和訳
+    @State private var playerItems: [PlaybackItem] = []
+    /// 連続再生の速度倍率(1.0=標準。アプリを閉じても記憶する)
+    @AppStorage("listenSpeed") private var listenSpeed = 1.0
+    /// 連続再生のボイス識別子(空=既定。アプリを閉じても記憶する)
+    @AppStorage("listenVoiceID") private var listenVoiceID = ""
+    /// 各英文を2回ずつ読むか(アプリを閉じても記憶する)
+    @AppStorage("repeatEachSentence") private var repeatEach = false
 
     private var visiblePassages: [Passage] {
         hideMemorized ? passages.filter { $0.memorizationStatus != .memorized } : passages
+    }
+
+    /// 連続再生の対象になる文章(表示中で英文が空でないもの)
+    private var playbackPassages: [Passage] {
+        visiblePassages.filter { !$0.englishFullText.isEmpty }
+    }
+
+    /// いま一覧に表示されている英文・和訳(覚えた!を表示中なら覚えたも含む)
+    private var visibleItems: [PlaybackItem] {
+        playbackPassages.map { PlaybackItem(english: $0.englishFullText, japanese: $0.japaneseFullText) }
+    }
+
+    /// 指定の文章から(なければ先頭から)連続再生を始める
+    private func startPlayback(from passage: Passage?) {
+        let items = visibleItems
+        guard !items.isEmpty else { return }
+        let startIndex = passage
+            .flatMap { p in playbackPassages.firstIndex { $0.persistentModelID == p.persistentModelID } } ?? 0
+        playerItems = items
+        speech.repeatSentence = repeatEach
+        speech.speakSequence(items.map(\.english), speed: listenSpeed,
+                             voiceID: listenVoiceID.isEmpty ? nil : listenVoiceID,
+                             startAt: startIndex)
+        showPlayer = true
     }
 
     var body: some View {
@@ -27,17 +65,23 @@ struct RecallListView: View {
                     ContentUnavailableView(
                         "英文がまだありません",
                         systemImage: "brain",
-                        description: Text("右上の + から暗記したい英文を登録しましょう。")
+                        description: Text("Mac(Claude Code)から英文を取り込むと、ここに表示されます。")
                     )
                 } else {
+                    let visible = visiblePassages
                     List {
-                        ForEach(visiblePassages) { passage in
+                        // 行ごとに一覧を検索し直さないよう、番号は enumerated で受け取る
+                        ForEach(Array(visible.enumerated()), id: \.element.persistentModelID) { index, passage in
                             HStack(spacing: 8) {
                                 statusBadge(passage.memorizationStatus)
                                 Text(rowText(for: passage))
                                     .font(.body)
                                     .lineLimit(1)
                                 Spacer(minLength: 0)
+                                // 何件目か(●/100)。覚えた!を隠していても番号は全体基準
+                                Text("\(index + 1)/\(visible.count)")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
                             }
                             .padding()
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -55,6 +99,15 @@ struct RecallListView: View {
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
+                            // 右スワイプでこの英文から連続再生(途中から再生)
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                Button {
+                                    startPlayback(from: passage)
+                                } label: {
+                                    Image(systemName: "play.fill")
+                                }
+                                .tint(.blue)
+                            }
                             // 「削除」の文字なし、ゴミ箱アイコンだけのスワイプ削除
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button(role: .destructive) {
@@ -73,12 +126,19 @@ struct RecallListView: View {
                 RecallSessionView(passage: passage)
             }
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                // 表示中の英文を連続再生 / 停止(アメリカ英語で1文ずつ滑らかに)
+                ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        showingAdd = true
+                        if isPlayingSequence {
+                            speech.stop()
+                        } else {
+                            startPlayback(from: nil)
+                        }
                     } label: {
-                        Image(systemName: "plus")
+                        Image(systemName: isPlayingSequence ? "stop.circle.fill" : "play.circle.fill")
+                            .foregroundStyle(isPlayingSequence ? .red : Color.accentColor)
                     }
+                    .disabled(!isPlayingSequence && visibleItems.isEmpty)
                 }
                 // 覚えた!の表示/非表示(緑=表示中、グレー=非表示中)
                 ToolbarItem(placement: .primaryAction) {
@@ -92,8 +152,17 @@ struct RecallListView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingAdd) {
-                AddPassageView(purpose: .recall)
+            // 連続再生中は、今読んでいる英文を開いて表示するプレイヤーを出す
+            .fullScreenCover(isPresented: $showPlayer) {
+                SentencePlayerView(items: playerItems)
+            }
+            // 暗記セッションに入る時などは連続再生を止める
+            .onChange(of: path) { _, newPath in
+                if !newPath.isEmpty { speech.stop() }
+            }
+            // 再生中かどうかだけを監視する(プレイヤー全体を @ObservedObject にしない)
+            .onReceive(SpeechSynthesisService.shared.$isPlayingSequence) { playing in
+                if isPlayingSequence != playing { isPlayingSequence = playing }
             }
         }
         // 詳細画面(階層あり)ではタブバーを隠す。

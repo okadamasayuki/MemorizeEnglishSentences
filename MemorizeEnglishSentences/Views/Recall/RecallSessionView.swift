@@ -59,11 +59,20 @@ struct RecallSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // ページをめくるように指に追従してスワイプで前後の文章へ移動できる
+            // ページをめくるように指に追従してスワイプで前後の文章へ移動できる。
+            // TabView(.page) は全ページを一度に作ってしまうため、
+            // 表示中と左右1ページ以外は空にして軽くする(音声入力中の再描画で顕著に効く)
             TabView(selection: $selectedID) {
-                ForEach(pages) { page in
-                    pageView(page)
-                        .tag(Optional(page.persistentModelID))
+                let currentIndex = pages.firstIndex { $0.persistentModelID == selectedID } ?? 0
+                ForEach(Array(pages.enumerated()), id: \.element.persistentModelID) { index, page in
+                    Group {
+                        if abs(index - currentIndex) <= 1 {
+                            pageView(page)
+                        } else {
+                            Color.clear
+                        }
+                    }
+                    .tag(Optional(page.persistentModelID))
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
@@ -197,13 +206,6 @@ struct RecallSessionView: View {
             }
         }
         .onAppear {
-            // 単語翻訳セッションを事前に確立しておく
-            if wordConfiguration == nil {
-                wordConfiguration = TranslationSession.Configuration(
-                    source: TranslationAvailability.english,
-                    target: TranslationAvailability.japanese
-                )
-            }
             // ページ一覧のスナップショット(一覧と同じ並び・絞り込み)を作る
             if pages.isEmpty {
                 var list = allPassages
@@ -394,6 +396,14 @@ struct RecallSessionView: View {
         if let cached = try? context.fetch(descriptor).first {
             wordMeaning.japanese = cached.japanese
             return
+        }
+        // ここで初めて Apple 翻訳が必要になる。セッションを遅延で用意する
+        // (起動時に前もって作ると「翻訳」の言語ダウンロード画面が出てしまうため)
+        if wordConfiguration == nil {
+            wordConfiguration = TranslationSession.Configuration(
+                source: TranslationAvailability.english,
+                target: TranslationAvailability.japanese
+            )
         }
         wordBroker.request(word)
     }

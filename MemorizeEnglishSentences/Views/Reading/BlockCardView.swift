@@ -3,7 +3,7 @@ import SwiftUI
 /// ブロックカード。英文は常に表示し、カードをタップすると和訳を表示/非表示。
 /// 和訳は英文1文ごと、その直下に対応する和訳が出るよう交互に並べる。
 /// 単語長押しで意味を表示する。
-struct BlockCardView: View {
+struct BlockCardView: View, Equatable {
     let block: Block
     let isExpanded: Bool
     let onToggle: () -> Void
@@ -13,6 +13,16 @@ struct BlockCardView: View {
     var sentencePairs: [SentencePairLookup.Pair]? = nil
     /// 元スクショの表示(対応する画像があるときだけ渡す)
     var onShowSource: (() -> Void)? = nil
+
+    /// スクロール中の現在位置更新などで、見えている全カードが作り直されるのを防ぐ。
+    /// 表示に効く値だけを比べ、同じなら再構築しない
+    /// (japaneseText 等のモデル内の変化は Observation が行単位で拾う)。
+    static func == (a: BlockCardView, b: BlockCardView) -> Bool {
+        a.block === b.block
+            && a.isExpanded == b.isExpanded
+            && a.sentencePairs == b.sentencePairs
+            && (a.onShowSource == nil) == (b.onShowSource == nil)
+    }
 
     /// ブロック全体のトークン(単語長押しの出現番号はここを基準に数える)
     private var tokens: [WordToken] {

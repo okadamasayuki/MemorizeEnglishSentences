@@ -32,11 +32,12 @@ enum MemorizationStatus: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// 熟語タブの 1 項目(熟語+意味+例文)
+/// 熟語タブの 1 項目(音読特化)。例文を読み上げながら熟語の意味を覚える。
+/// 一意性は「級+番号」の組(級をまたぐと番号が重複する: 2級1601-1700 と 準1級1601-1700)。
 @Model
 final class Idiom {
-    /// 見出し語番号(2101 など)。並び順に使う
-    @Attribute(.unique) var number: Int
+    /// 見出し語番号(2101 など)。並び順に使う。級をまたぐと重複しうる
+    var number: Int
     /// 熟語(例: "abide by ~")
     var phrase: String
     /// 意味(和訳。[= 類義語] を含む)
@@ -45,23 +46,65 @@ final class Idiom {
     var example: String
     /// 例文の和訳
     var exampleJa: String
-    /// 星印(単語タブと同じ。付けた熟語だけに絞り込める)
+    /// 星印(旧UIの名残。スキーマ互換のため残す。未使用)
     var isStarred: Bool = false
     /// しおり(どこまで進めたかの目印。全体で1か所)
     var isBookmarked: Bool = false
     /// (旧UIの名残。スキーマ互換のため残す。未使用)
     var memorizationStatusRaw: String = "normal"
+    /// 級(例: "準1級" / "1級")。熟語タブでこの単位に絞り込んで表示する
+    var level: String = ""
+    /// 例文中の熟語部分のトークン番号(空白区切り・0始まり)のJSON配列。
+    /// Mac 側で活用形も考慮して算出済み。強調表示と長押し判定に使う
+    var idiomTokensJSON: String = ""
 
-    init(number: Int, phrase: String, meaning: String, example: String, exampleJa: String) {
+    init(number: Int, phrase: String, meaning: String, example: String, exampleJa: String, level: String = "") {
         self.number = number
         self.phrase = phrase
         self.meaning = meaning
         self.example = example
         self.exampleJa = exampleJa
+        self.level = level
+    }
+
+    /// JSON文字列→トークン番号集合のメモ(一覧の描画のたびにデコードしないため)
+    private static var tokenIndexCache: [String: Set<Int>] = [:]
+
+    /// 例文中の熟語部分のトークン番号(デコード済み)
+    var idiomTokenIndexes: Set<Int> {
+        if let hit = Self.tokenIndexCache[idiomTokensJSON] { return hit }
+        guard let data = idiomTokensJSON.data(using: .utf8),
+              let list = try? JSONDecoder().decode([Int].self, from: data) else { return [] }
+        let set = Set(list)
+        if Self.tokenIndexCache.count > 4000 { Self.tokenIndexCache.removeAll(keepingCapacity: true) }
+        Self.tokenIndexCache[idiomTokensJSON] = set
+        return set
     }
 }
 
-/// 単語タブの 1 項目(英語フレーズ+和訳)
+/// (旧)履歴タブの1項目。タブは廃止済みだが、@Model を削除すると
+/// SwiftData のマイグレーションでクラッシュするため、定義だけ残している(データは削除済み)。
+@Model
+final class LookedUpWord {
+    @Attribute(.unique) var word: String
+    /// 調べた時に表示していた和訳(空のこともある)
+    var meaning: String
+    /// 最後に調べた日時(新しい順の並びに使う)
+    var lookedUpAt: Date
+    /// お気に入り(❤️)。右スワイプで登録
+    var isFavorite: Bool = false
+    /// 長押しで調べた回数(間違えた時はカウントしない)
+    var count: Int = 1
+
+    init(word: String, meaning: String, lookedUpAt: Date) {
+        self.word = word
+        self.meaning = meaning
+        self.lookedUpAt = lookedUpAt
+    }
+}
+
+/// (旧)単語タブの 1 項目。タブは廃止済みだが、@Model を削除すると
+/// SwiftData のマイグレーションでクラッシュするため、定義だけ残している(データは削除済み)。
 @Model
 final class VocabWord {
     /// 表示順(音声の収録順)

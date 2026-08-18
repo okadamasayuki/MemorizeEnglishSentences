@@ -2,17 +2,32 @@ import SwiftData
 import SwiftUI
 import Translation
 
-/// 熟語タブ。熟語+例文を表示し、タップすると熟語の横に意味、英文の下に和訳を表示するカード。
-/// 熟語・例文の単語長押しで意味+発音、元スクショ、しおり(左スワイプ)・削除(右スワイプ)。
+/// 長押しされた熟語(シート表示用)。例文中に現れた形も持つ
+private struct SelectedIdiom: Identifiable {
+    let id = UUID()
+    let idiom: Idiom
+    let surfaceForm: String
+}
+
+/// 熟語タブ(音読特化)。例文を読み上げながら熟語を覚える。
+/// - 例文中の熟語部分は強調表示。長押しで「この文での意味+発音」
+/// - それ以外の単語の長押しで文中での意味(音読タブと同じ事前生成キャッシュ)
+/// - カードをタップで熟語+意味+和訳を表示(既定は隠して自己テスト)
+/// - 左スワイプでしおり(全体1か所)、右スワイプで削除
 struct IdiomListView: View {
     @Environment(\.modelContext) private var context
-    @Query(sort: \Idiom.number) private var idioms: [Idiom]
-    /// 意味を表示中のカード
+    @Query(sort: \Idiom.number) private var allIdioms: [Idiom]
+    /// 意味を表示中のカード番号
     @State private var revealed: Set<Int> = []
+    /// 選択中の級(セグメント)。未選択時は最初の級
+    @AppStorage("idiomSelectedLevel") private var storedLevel = ""
     /// 表示中の元スクショ
     @State private var sourceImage: IdentifiableImage?
     @State private var scrollProxy: ScrollViewProxy?
     @State private var didRestore = false
+
+    // 熟語の意味シート
+    @State private var selectedIdiom: SelectedIdiom?
 
     // 単語長押し(音読タブと同じ仕組み)
     @State private var selectedWord: SelectedWord?
@@ -21,14 +36,37 @@ struct IdiomListView: View {
     @State private var warmupRetryCount = 0
     @State private var wordConfiguration: TranslationSession.Configuration?
 
+    /// 登録されている級の一覧(易→難: 2級→準1級→1級)
+    private var levels: [String] {
+        var seen: [String] = []
+        for idiom in allIdioms where !seen.contains(idiom.level) {
+            seen.append(idiom.level)
+        }
+        let order = ["2級", "準1級", "1級"]
+        return seen.sorted { a, b in
+            let ia = order.firstIndex(of: a) ?? order.count
+            let ib = order.firstIndex(of: b) ?? order.count
+            return ia == ib ? a < b : ia < ib
+        }
+    }
+
+    private var effectiveLevel: String {
+        levels.contains(storedLevel) ? storedLevel : (levels.first ?? "")
+    }
+
+    /// 表示対象(選択中の級だけ)
+    private var idioms: [Idiom] {
+        allIdioms.filter { $0.level == effectiveLevel }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
-                if idioms.isEmpty {
+                if allIdioms.isEmpty {
                     ContentUnavailableView(
                         "熟語がまだありません",
                         systemImage: "text.book.closed",
-                        description: Text("写真から熟語を取り込むと、ここでカード学習できます。")
+                        description: Text("Macから熟語データを取り込むと、ここで音読学習できます。")
                     )
                 } else {
                     ScrollViewReader { proxy in
@@ -62,8 +100,7 @@ struct IdiomListView: View {
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
-                        // 一番上に少し余白を足す
-                        .contentMargins(.top, 12, for: .scrollContent)
+                        .contentMargins(.top, 10, for: .scrollContent)
                         .onAppear {
                             scrollProxy = proxy
                             restoreBookmarkIfNeeded(proxy)
@@ -71,7 +108,13 @@ struct IdiomListView: View {
                     }
                 }
             }
+            .navigationTitle("熟語")
             .navigationBarTitleDisplayMode(.inline)
+            // 級を切り替えたら「意味を表示中」状態をリセットする
+            // (番号は級をまたいで重複しうるため、他の級に持ち越さない)
+            .onChange(of: effectiveLevel) { _, _ in
+                revealed.removeAll()
+            }
             .toolbar {
                 // しおりへジャンプ
                 if let marked = idioms.first(where: { $0.isBookmarked }) {
@@ -83,6 +126,24 @@ struct IdiomListView: View {
                         }
                     }
                 }
+                // 級の切り替え(複数の級があるときだけ)
+                if levels.count > 1 {
+                    ToolbarItem(placement: .principal) {
+                        Picker("級", selection: Binding(
+                            get: { effectiveLevel },
+                            set: { storedLevel = $0 }
+                        )) {
+                            ForEach(levels, id: \.self) { level in
+                                Text(level).tag(level)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 240)
+                    }
+                }
+            }
+            .sheet(item: $selectedIdiom) { selected in
+                IdiomPopupView(idiom: selected.idiom, surfaceForm: selected.surfaceForm)
             }
             .sheet(item: $selectedWord) { selected in
                 WordPopupView(word: selected.word, meaning: wordMeaning)
@@ -90,7 +151,8 @@ struct IdiomListView: View {
             .sheet(item: $sourceImage) { item in
                 SourceImageView(image: item.image)
             }
-            // 単語の翻訳(常駐セッション 1 本に、長押しされた単語を流し込む)
+            // 単語の翻訳(常駐セッション 1 本に、長押しされた単語を流し込む)。
+            // 事前生成キャッシュにない単語だけがここに来る
             .translationTask(wordConfiguration) { session in
                 do {
                     _ = try await translate(session, "hello", timeoutSeconds: 3)
@@ -107,6 +169,7 @@ struct IdiomListView: View {
                     do {
                         let translated = try await translate(session, target, timeoutSeconds: 10)
                         if selectedWord?.word == target { wordMeaning.japanese = translated }
+                        saveWordCache(target, translated)
                     } catch {
                         if wordBroker.shouldRetry(target) {
                             wordBroker.stashForRetry(target)
@@ -117,121 +180,60 @@ struct IdiomListView: View {
                     }
                 }
             }
-            .onAppear {
-                if wordConfiguration == nil {
-                    wordConfiguration = TranslationSession.Configuration(
-                        source: TranslationAvailability.english,
-                        target: TranslationAvailability.japanese
-                    )
-                }
-            }
         }
     }
 
     @ViewBuilder
     private func card(_ idiom: Idiom) -> some View {
-        let isRevealed = revealed.contains(idiom.number)
-        VStack(alignment: .leading, spacing: 8) {
-            // 熟語(単語長押し可) + (タップで)横に意味 + しおり/元スクショ(縦中心をそろえる)
-            HStack(alignment: .center, spacing: 10) {
-                // 熟語の見出し。長押しで熟語の意味+発音
-                Text(idiom.phrase)
-                    .font(.title3.bold())
-                    .onLongPressGesture { showIdiomMeaning(idiom) }
-                if isRevealed {
-                    Text(idiom.meaning)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.accentColor)
-                        .fixedSize(horizontal: false, vertical: true)
+        IdiomCardView(
+            idiom: idiom,
+            isRevealed: revealed.contains(idiom.number),
+            onToggle: { toggle(idiom) },
+            onWordTap: { word, occurrence, isIdiomPart in
+                if isIdiomPart {
+                    showIdiom(idiom)
+                } else {
+                    showWord(word, occurrence: occurrence, sentenceContext: idiom.example)
                 }
-                Spacer(minLength: 0)
-                if idiom.isBookmarked {
-                    Image(systemName: "bookmark.fill").font(.subheadline).foregroundStyle(.orange)
-                }
-                if PageImageStore.hasImage(forBlockText: idiom.example) {
-                    Button {
-                        sourceImage = PageImageStore.image(forBlockText: idiom.example).map(IdentifiableImage.init)
-                    } label: {
-                        Image(systemName: "photo").font(.subheadline).foregroundStyle(Color.accentColor)
-                    }
-                    .buttonStyle(.borderless)
-                }
-            }
+            },
+            onSpeak: { SpeechSynthesisService.shared.speak(idiom.example) },
+            onShowSource: PageImageStore.hasImage(forBlockText: idiom.example)
+                ? { sourceImage = PageImageStore.image(forBlockText: idiom.example).map(IdentifiableImage.init) }
+                : nil
+        )
+        .equatable()
+    }
 
-            // 例文(単語長押しで意味+発音。熟語の一部を長押ししたら熟語の意味を表示)
-            exampleTokens(idiom)
-
-            // 英文の和訳(タップで英文の下に表示)
-            if isRevealed, !idiom.exampleJa.isEmpty {
-                Text(idiom.exampleJa)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
-        .contentShape(RoundedRectangle(cornerRadius: 12))
-        // タップで意味の表示/非表示(モーションなし)
-        .onTapGesture {
-            if isRevealed { revealed.remove(idiom.number) } else { revealed.insert(idiom.number) }
+    private func toggle(_ idiom: Idiom) {
+        if revealed.contains(idiom.number) {
+            revealed.remove(idiom.number)
+        } else {
+            revealed.insert(idiom.number)
         }
     }
 
-    /// 例文を、単語ごとに長押しできるトークンとして折り返し表示する。
-    /// 熟語の一部(見出しの語)は太字にし、長押しで熟語の意味を表示する。
-    @ViewBuilder
-    private func exampleTokens(_ idiom: Idiom) -> some View {
-        let keys = idiomKeys(idiom.phrase)
-        FlowLayout(spacing: 4, lineSpacing: 6) {
-            ForEach(WordTokenizer.tokenize(idiom.example)) { token in
-                let word = token.normalized
-                let isIdiom = isIdiomWord(word, keys)
-                Text(token.display)
-                    .font(.subheadline)
-                    .fontWeight(isIdiom ? .bold : .regular)
-                    .onLongPressGesture {
-                        if word.count >= 2, word.contains(where: { $0.isLetter }) {
-                            showWord(word, in: idiom.example)
-                        }
-                    }
-            }
-        }
+    /// 例文中に現れた形(熟語トークンをつないだもの)で熟語シートを出す
+    private func showIdiom(_ idiom: Idiom) {
+        let tokens = WordTokenizer.tokenize(idiom.example)
+        let surface = idiom.idiomTokenIndexes.sorted().compactMap { index -> String? in
+            guard tokens.indices.contains(index) else { return nil }
+            let token = tokens[index]
+            // 表示形から前後の句読点だけ落とす(大文字は保つ)
+            let trimmed = token.display.trimmingCharacters(
+                in: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "'’")).inverted
+            )
+            return trimmed.isEmpty ? nil : trimmed
+        }.joined(separator: " ")
+        selectedIdiom = SelectedIdiom(idiom: idiom, surfaceForm: surface)
     }
 
-    /// 熟語見出しの構成語(~ / A / B などのプレースホルダーは除く)
-    private func idiomKeys(_ phrase: String) -> [String] {
-        phrase.lowercased()
-            .split(whereSeparator: { !$0.isLetter })
-            .map(String.init)
-            .filter { $0.count >= 2 }
-    }
-
-    /// 例文のこの語が熟語の一部か(語尾変化を許容してマッチ)
-    private func isIdiomWord(_ token: String, _ keys: [String]) -> Bool {
-        guard token.count >= 2 else { return false }
-        return keys.contains { key in
-            token == key
-                || (key.count >= 3 && token.hasPrefix(key))   // bail→bailing, act→acting
-                || (token.count >= 3 && key.hasPrefix(token))  // 念のため逆向きも
-        }
-    }
-
-    /// 熟語の見出し長押し: 熟語の意味(そのまま)と発音を表示する
-    private func showIdiomMeaning(_ idiom: Idiom) {
-        wordMeaning.reset()
-        wordMeaning.japanese = idiom.meaning
-        selectedWord = SelectedWord(word: idiom.phrase)
-    }
-
-    /// 単語の意味を表示(音読タブと同じ: 事前生成の文脈キャッシュ→内蔵辞書→Apple翻訳)。
-    /// 例文中の熟語部分は文脈キャッシュに熟語形の訳が入っているので、それが表示される。
-    private func showWord(_ word: String, in example: String) {
+    /// 単語の意味を表示。事前生成した「この文中での意味」を最優先し、
+    /// なければ内蔵辞書 → キャッシュ → Apple 翻訳で解決する(音読タブと同じ)
+    private func showWord(_ word: String, occurrence: Int, sentenceContext: String) {
         wordMeaning.reset()
         selectedWord = SelectedWord(word: word)
-        if let cached = WordSenseLookup.cached(word: word, blockText: example, modelContext: context) {
+
+        if let cached = WordSenseLookup.cached(word: word, occurrence: occurrence, blockText: sentenceContext, modelContext: context) {
             wordMeaning.apply(cached)
             return
         }
@@ -239,25 +241,54 @@ struct IdiomListView: View {
             wordMeaning.japanese = entry
             return
         }
+        let target = word
+        let descriptor = FetchDescriptor<WordCacheEntry>(
+            predicate: #Predicate { $0.word == target }
+        )
+        if let cached = try? context.fetch(descriptor).first {
+            wordMeaning.japanese = cached.japanese
+            return
+        }
+        if wordConfiguration == nil {
+            wordConfiguration = TranslationSession.Configuration(
+                source: TranslationAvailability.english,
+                target: TranslationAvailability.japanese
+            )
+        }
         wordBroker.request(word)
     }
 
-    /// しおりを付け替える(全体で1か所)
-    private func toggleBookmark(_ idiom: Idiom) {
-        let wasMarked = idiom.isBookmarked
-        for other in idioms where other.isBookmarked { other.isBookmarked = false }
-        idiom.isBookmarked = !wasMarked
+    private func saveWordCache(_ word: String, _ translation: String) {
+        let target = word
+        let descriptor = FetchDescriptor<WordCacheEntry>(
+            predicate: #Predicate { $0.word == target }
+        )
+        if let existing = try? context.fetch(descriptor).first {
+            existing.japanese = translation
+            existing.updatedAt = .now
+        } else {
+            context.insert(WordCacheEntry(word: target, japanese: translation))
+        }
         try? context.save()
     }
 
-    /// 起動後、しおり位置へ一度だけスクロールする
+    /// しおりは全体で1か所。付け直すと移動、同じ場所なら解除
+    private func toggleBookmark(_ idiom: Idiom) {
+        let wasBookmarked = idiom.isBookmarked
+        for other in allIdioms where other.isBookmarked {
+            other.isBookmarked = false
+        }
+        idiom.isBookmarked = !wasBookmarked
+        try? context.save()
+    }
+
+    /// 起動後の初回表示時に、しおりの位置まで自動スクロールする
     private func restoreBookmarkIfNeeded(_ proxy: ScrollViewProxy) {
         guard !didRestore else { return }
         didRestore = true
         guard let marked = idioms.first(where: { $0.isBookmarked }) else { return }
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(0.3))
-            withAnimation { proxy.scrollTo(marked.number, anchor: .center) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            proxy.scrollTo(marked.number, anchor: .center)
         }
     }
 }

@@ -1,16 +1,20 @@
+import Combine
 import SwiftData
 import SwiftUI
 import Translation
 
 /// 音読タブ。文章の分類はせず、登録したすべての英文ブロックを 1 画面に連続表示する。
 struct PassageListView: View {
+    /// 音読タブが再タップされるたびに増える値。iOS 標準の「一番上へスクロール」を
+    /// 打ち消して前回位置に戻すために使う。
+    var reselectSignal: Int = 0
+
     @Environment(\.modelContext) private var context
     @Query(
         filter: #Predicate<Passage> { $0.purposeRaw == "reading" },
         sort: \Passage.createdAt, order: .reverse
     ) private var passages: [Passage]
 
-    @State private var showingAdd = false
     @State private var expandedBlockIDs: Set<PersistentIdentifier> = []
     @State private var selectedWord: SelectedWord?
     @StateObject private var wordMeaning = WordMeaningModel()
@@ -18,18 +22,126 @@ struct PassageListView: View {
     @State private var warmupRetryCount = 0
     @State private var wordConfiguration: TranslationSession.Configuration?
     @State private var retryConfiguration: TranslationSession.Configuration?
-    @State private var isSelecting = false
-    @State private var selection = Set<PersistentIdentifier>()
     @State private var scrollProxy: ScrollViewProxy?
     /// 表示中の元スクショ(nil = 非表示)
     @State private var sourceImage: IdentifiableImage?
     /// 画面中央付近にあるブロック(現在位置の表示・しおりの自動更新に使う)
     @State private var currentBlockID: PersistentIdentifier?
-    /// 起動後に前回位置(しおり)へ一度だけスクロールしたか
-    @State private var didRestore = false
+    /// 起動後に一度だけしおり位置へ合わせたか
+    @State private var didInitialScroll = false
+    /// 起動時の位置復元が完了したか(完了までは自動しおり保存を止める)
+    @State private var restoreDone = false
+    /// アプリの利用期限のお知らせを表示中か
+    @State private var showExpiryInfo = false
+    /// 連続再生の状態。@ObservedObject にすると再生中の状態更新のたびに
+    /// 一覧全体が再描画されて重くなるため、必要な変化だけ onReceive で拾う
+    private var speech: SpeechSynthesisService { .shared }
+    /// 教材音声プレイヤーの状態(同上)
+    private var audioPlayer: AudioSequencePlayer { .shared }
+    /// どちらかのプレイヤーが連続再生中か(ツールバーの表示切り替え用)
+    @State private var isAnyPlaying = false
+    /// 連続再生プレイヤーの表示(TTS)
+    @State private var showPlayer = false
+    /// 教材音声プレイヤーの表示
+    @State private var showAudioPlayer = false
+    /// 連続再生中の英文・和訳
+    @State private var playerItems: [PlaybackItem] = []
+    /// 連続再生の速度・ボイス・繰り返し(暗記タブと共有)
+    @AppStorage("listenSpeed") private var listenSpeed = 1.0
+    @AppStorage("listenVoiceID") private var listenVoiceID = ""
+    @AppStorage("repeatEachSentence") private var repeatEach = false
+    /// 音声再生用しおり(最後に聴いていた英文の先頭部分)。音読用しおりとは別に記憶する
+    @AppStorage("audioPlaybackBookmark") private var audioBookmark = ""
+    /// 再生セッション中の各項目→英文キー(再生位置をしおりへ保存するための対応表)
+    @State private var playerKeys: [String] = []
 
     private var blocks: [Block] {
         passages.flatMap { $0.orderedBlocks }
+    }
+
+    /// 連続再生の対象(英文が空でないブロック)
+    private var playbackBlocks: [Block] {
+        blocks.filter { !$0.englishText.isEmpty }
+    }
+
+    /// 音声再生用しおりのキー(英文の先頭で識別)
+    private func playbackKey(for block: Block) -> String {
+        String(block.englishText.prefix(80))
+    }
+
+    /// 音声再生用しおり(最後に聴いていた英文)から、または最初から連続再生を始める。
+    /// 画面スクロール用のしおり(音読用)とは独立して動く。
+    private func startPlayback(fromBeginning: Bool) {
+        startPlaybackCore(startKey: fromBeginning ? nil : audioBookmark)
+    }
+
+    /// 指定した英文から連続再生を始める(一覧の右スワイプ▶)
+    private func startPlayback(from block: Block) {
+        startPlaybackCore(startKey: playbackKey(for: block))
+    }
+
+    /// 連続再生の本体。startKey に一致する英文から(見つからなければ先頭から)始める。
+    /// 教材音声(block_audio)があるブロックは実音声+単語タイミングで再生し、
+    /// 無い場合(後から追加した英文のみ等)はTTSで読む。
+    private func startPlaybackCore(startKey: String?) {
+        let targets = playbackBlocks
+        guard !targets.isEmpty else { return }
+
+        // 教材音声モード: 音声があるブロックだけを対象にする
+        let audioTargets = targets.filter { BlockAudioStore.hasAudio(forBlockText: $0.englishText) }
+        if !audioTargets.isEmpty {
+            let items: [AudioPlaybackItem] = audioTargets.compactMap { blk in
+                guard let a = BlockAudioStore.item(forBlockText: blk.englishText) else { return nil }
+                // 文ごとの英↔和ペアがあれば「英文1文→和訳→…」の交互表示と文単位再生用に位置を解決する
+                let segments = SentencePairLookup.cached(blockText: blk.englishText, modelContext: context)
+                    .flatMap { pairs in
+                        AudioPlaybackItem.buildSegments(english: blk.englishText,
+                                                        pairs: pairs.map { ($0.en, $0.ja) },
+                                                        words: a.words)
+                    }
+                // 保存済みの文ごと再生回数(×0=スキップ、×2以上=繰り返し)を反映する
+                let counts = SentenceRepeatStore.counts(forBlockText: blk.englishText,
+                                                        sentenceCount: segments?.count ?? 0)
+                return AudioPlaybackItem(english: blk.englishText, japanese: blk.japaneseText ?? "",
+                                         url: a.url, words: a.words, segments: segments,
+                                         repeatCounts: counts, silences: a.silences,
+                                         blockRepeat: SentenceRepeatStore.globalBlockCount)
+            }
+            guard !items.isEmpty else { return }
+            let keys = audioTargets.map { playbackKey(for: $0) }
+            let startIndex = startKey.flatMap { keys.firstIndex(of: $0) } ?? 0
+            playerKeys = keys
+            audioPlayer.start(items: items, startAt: startIndex, speed: listenSpeed)
+            showAudioPlayer = true
+            return
+        }
+
+        // TTSモード(教材音声が1つも無い場合のフォールバック)
+        let keys = targets.map { playbackKey(for: $0) }
+        let startIndex = startKey.flatMap { keys.firstIndex(of: $0) } ?? 0
+        playerKeys = keys
+        playerItems = targets.map { PlaybackItem(english: $0.englishText, japanese: $0.japaneseText ?? "") }
+        speech.repeatSentence = repeatEach
+        speech.speakSequence(playerItems.map(\.english), speed: listenSpeed,
+                             voiceID: listenVoiceID.isEmpty ? nil : listenVoiceID,
+                             startAt: startIndex)
+        showPlayer = true
+    }
+
+    /// 残りわずかなら赤、少なめなら橙、余裕があれば通常色
+    private var expiryTintColor: Color {
+        guard let days = AppExpiry.daysRemaining else { return .secondary }
+        if days <= 1 { return .red }
+        if days <= 3 { return .orange }
+        return .secondary
+    }
+
+    /// 期限アラートの本文
+    private var expiryMessage: String {
+        guard let dateText = AppExpiry.expirationText else {
+            return "利用期限を取得できませんでした。"
+        }
+        return "\(dateText) まで使えます"
     }
 
     var body: some View {
@@ -39,7 +151,7 @@ struct PassageListView: View {
                     ContentUnavailableView(
                         "英文がまだありません",
                         systemImage: "book",
-                        description: Text("右上の + から英文を登録しましょう。音声入力でも写真でも OK です。")
+                        description: Text("Mac(Claude Code)から英文を取り込むと、ここに表示されます。")
                     )
                 } else {
                     ScrollViewReader { proxy in
@@ -59,6 +171,15 @@ struct PassageListView: View {
                                             )
                                         }
                                     )
+                                    // 右スワイプでこの英文から連続再生(途中から再生)
+                                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                        Button {
+                                            startPlayback(from: block)
+                                        } label: {
+                                            Image(systemName: "play.fill")
+                                        }
+                                        .tint(.blue)
+                                    }
                                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                         Button(role: .destructive) {
                                             delete(block)
@@ -69,70 +190,110 @@ struct PassageListView: View {
                             }
                         }
                         .listStyle(.plain)
-                        // 選択モード中は背景色を少し変えてわかるようにする
+                        // タブ再タップ時の「トップへスクロール」を無効化(空白なしで前回位置のまま)
+                        .background(DisableScrollToTop())
                         .scrollContentBackground(.hidden)
-                        .background(isSelecting ? Color.red.opacity(0.07) : Color(.systemBackground))
-                        .animation(.easeInOut(duration: 0.2), value: isSelecting)
+                        .background(Color(.systemBackground))
                         // 中央に最も近い行を現在位置として更新する
                         .onPreferenceChange(BlockCenterKey.self) { positions in
                             updateCurrentBlock(from: positions)
                         }
                         .onAppear {
                             scrollProxy = proxy
-                            restoreLastPositionIfNeeded(proxy)
+                            // 起動後の初回だけ、しおり位置へアニメーションなしで即ジャンプする
+                            // (スルスル動くのではなく一瞬で位置が決まる)
+                            if !didInitialScroll {
+                                didInitialScroll = true
+                                if let marked = blocks.first(where: { $0.isMarked }) {
+                                    proxy.scrollTo(marked.persistentModelID, anchor: .center)
+                                }
+                                // 復元が落ち着いてから自動しおり保存を再開する
+                                Task { @MainActor in
+                                    try? await Task.sleep(for: .seconds(0.6))
+                                    restoreDone = true
+                                }
+                            }
                         }
                     }
                 }
             }
             .toolbar {
-                if !blocks.isEmpty {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            withAnimation {
-                                isSelecting.toggle()
-                                selection.removeAll()
-                            }
-                        } label: {
-                            Image(systemName: isSelecting ? "checkmark.circle.fill" : "checkmark.circle")
-                                .foregroundStyle(isSelecting ? Color.red : Color.accentColor)
-                        }
-                    }
-                    // 現在位置(240件中 N件目)
-                    if !isSelecting {
-                        ToolbarItem(placement: .principal) {
-                            Text("\(blocks.count)件中 \(currentPositionText)件目")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
+                // アプリの利用期限(タップで日付を表示)。残りわずかなら赤くする
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showExpiryInfo = true
+                    } label: {
+                        Image(systemName: "calendar.badge.clock")
+                            .foregroundStyle(expiryTintColor)
                     }
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    if isSelecting {
-                        Button(role: .destructive) {
-                            deleteSelected()
-                        } label: {
-                            Image(systemName: "trash")
-                        }
-                        .disabled(selection.isEmpty)
-                    } else {
-                        Button {
-                            showingAdd = true
-                        } label: {
-                            Image(systemName: "plus")
+                if !blocks.isEmpty {
+                    // 現在位置(240件中 N件目)
+                    ToolbarItem(placement: .principal) {
+                        Text("\(blocks.count)件中 \(currentPositionText)件目")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    // 連続再生: 最初から(⏮) / 続きから(▶ 音声再生用しおり)。再生中は停止ボタン
+                    ToolbarItem(placement: .primaryAction) {
+                        if isAnyPlaying {
+                            Button {
+                                speech.stop()
+                                audioPlayer.stop()
+                            } label: {
+                                Image(systemName: "stop.circle.fill")
+                                    .foregroundStyle(.red)
+                            }
+                        } else {
+                            HStack(spacing: 14) {
+                                // 最初から再生
+                                Button {
+                                    startPlayback(fromBeginning: true)
+                                } label: {
+                                    Image(systemName: "backward.end.circle.fill")
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                                // 続きから再生(最後に聴いていた英文から)
+                                Button {
+                                    startPlayback(fromBeginning: false)
+                                } label: {
+                                    Image(systemName: "play.circle.fill")
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                            }
                         }
                     }
                 }
             }
-            .sheet(isPresented: $showingAdd, onDismiss: {
-                startRetryTranslationIfNeeded()
-            }) {
-                AddPassageView(purpose: .reading)
+            // 再生位置を音声再生用しおりに保存し続ける(音読のしおりとは独立)
+            .onReceive(AudioSequencePlayer.shared.$sequenceIndex) { idx in
+                if let idx, playerKeys.indices.contains(idx) { audioBookmark = playerKeys[idx] }
+            }
+            .onReceive(SpeechSynthesisService.shared.$sequenceIndex) { idx in
+                if let idx, showPlayer, playerKeys.indices.contains(idx) { audioBookmark = playerKeys[idx] }
+            }
+            // 再生中かどうかだけを監視する(プレイヤー全体を @ObservedObject にしない)
+            .onReceive(AudioSequencePlayer.shared.$isPlayingSequence
+                .combineLatest(SpeechSynthesisService.shared.$isPlayingSequence)) { audio, tts in
+                let playing = audio || tts
+                if isAnyPlaying != playing { isAnyPlaying = playing }
+            }
+            .fullScreenCover(isPresented: $showPlayer) {
+                SentencePlayerView(items: playerItems)
+            }
+            .fullScreenCover(isPresented: $showAudioPlayer) {
+                AudioPlayerView()
             }
             .sheet(item: $selectedWord) { selected in
                 WordPopupView(word: selected.word, meaning: wordMeaning)
             }
             .sheet(item: $sourceImage) { item in
                 SourceImageView(image: item.image)
+            }
+            .alert("アプリの利用期限", isPresented: $showExpiryInfo) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(expiryMessage)
             }
             // スクロールが落ち着いたら現在位置のブロックにしおりを保存する(書き込み過多を防ぐ)
             .task(id: currentBlockID) {
@@ -184,54 +345,25 @@ struct PassageListView: View {
             }
             .onAppear {
                 startRetryTranslationIfNeeded()
-                // 単語翻訳セッションを事前に確立しておく
-                // (最初の単語タップ時にシートの裏でセッション初期化して固まるのを防ぐ)
-                if wordConfiguration == nil {
-                    wordConfiguration = TranslationSession.Configuration(
-                        source: TranslationAvailability.english,
-                        target: TranslationAvailability.japanese
-                    )
-                }
             }
         }
     }
 
-    /// 選択モード中はタップで赤くハイライトし、通常時はいつも通りのカード
     @ViewBuilder
     private func blockRow(_ block: Block) -> some View {
-        let isSelected = selection.contains(block.persistentModelID)
-        ZStack {
-            BlockCardView(
-                block: block,
-                isExpanded: expandedBlockIDs.contains(block.persistentModelID),
-                onToggle: { toggle(block) },
-                onWordTap: { word, occurrence in
-                    showWord(word, occurrence: occurrence, sentenceContext: block.englishText)
-                },
-                sentencePairs: SentencePairLookup.cached(blockText: block.englishText, modelContext: context),
-                onShowSource: PageImageStore.hasImage(forBlockText: block.englishText)
-                    ? { sourceImage = PageImageStore.image(forBlockText: block.englishText).map(IdentifiableImage.init) }
-                    : nil
-            )
-            .allowsHitTesting(!isSelecting)
-
-            if isSelecting {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.red.opacity(0.18) : Color.clear)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(isSelected ? Color.red : Color.clear, lineWidth: 2)
-                    )
-                    .contentShape(RoundedRectangle(cornerRadius: 12))
-                    .onTapGesture {
-                        if isSelected {
-                            selection.remove(block.persistentModelID)
-                        } else {
-                            selection.insert(block.persistentModelID)
-                        }
-                    }
-            }
-        }
+        BlockCardView(
+            block: block,
+            isExpanded: expandedBlockIDs.contains(block.persistentModelID),
+            onToggle: { toggle(block) },
+            onWordTap: { word, occurrence in
+                showWord(word, occurrence: occurrence, sentenceContext: block.englishText)
+            },
+            sentencePairs: SentencePairLookup.cached(blockText: block.englishText, modelContext: context),
+            onShowSource: PageImageStore.hasImage(forBlockText: block.englishText)
+                ? { sourceImage = PageImageStore.image(forBlockText: block.englishText).map(IdentifiableImage.init) }
+                : nil
+        )
+        .equatable()
     }
 
     /// 単語の意味を表示。Claude Code が事前生成した「その文中での意味」を最優先し、
@@ -262,6 +394,14 @@ struct PassageListView: View {
             wordMeaning.japanese = cached.japanese
             return
         }
+        // ここで初めて Apple 翻訳が必要になる。セッションを遅延で用意する
+        // (起動時に前もって作ると「翻訳」の言語ダウンロード画面が出てしまうため)
+        if wordConfiguration == nil {
+            wordConfiguration = TranslationSession.Configuration(
+                source: TranslationAvailability.english,
+                target: TranslationAvailability.japanese
+            )
+        }
         wordBroker.request(word)
     }
 
@@ -287,9 +427,40 @@ struct PassageListView: View {
         return "\(index + 1)"
     }
 
-    /// 各行の中央 Y から、画面中央に一番近い行を現在位置として選ぶ
+    /// スクロール中の位置更新を間引くための入れ物(毎フレーム状態を書き換えない)
+    private final class CurrentBlockThrottle {
+        var last = Date.distantPast
+        var pending: [PersistentIdentifier: CGFloat]?
+        var scheduled = false
+    }
+    @State private var blockThrottle = CurrentBlockThrottle()
+
+    /// 各行の中央 Y から、画面中央に一番近い行を現在位置として選ぶ。
+    /// スクロール中は毎フレーム届くので 0.15 秒に1回へ間引き、最後の1回は必ず反映する
+    /// (毎フレーム @State を書くと一覧全体の再評価が走ってカクつく)。
     private func updateCurrentBlock(from positions: [PersistentIdentifier: CGFloat]) {
         guard !positions.isEmpty else { return }
+        let now = Date()
+        if now.timeIntervalSince(blockThrottle.last) >= 0.15 {
+            blockThrottle.last = now
+            applyCurrentBlock(from: positions)
+        } else {
+            blockThrottle.pending = positions
+            if !blockThrottle.scheduled {
+                blockThrottle.scheduled = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    blockThrottle.scheduled = false
+                    if let pending = blockThrottle.pending {
+                        blockThrottle.pending = nil
+                        blockThrottle.last = Date()
+                        applyCurrentBlock(from: pending)
+                    }
+                }
+            }
+        }
+    }
+
+    private func applyCurrentBlock(from positions: [PersistentIdentifier: CGFloat]) {
         let screenCenter = UIScreen.main.bounds.height / 2
         let nearest = positions.min { abs($0.value - screenCenter) < abs($1.value - screenCenter) }
         if let id = nearest?.key, id != currentBlockID {
@@ -299,6 +470,9 @@ struct PassageListView: View {
 
     /// 現在位置のブロックにしおりを自動で付け替える(1か所だけ)
     private func persistBookmark() {
+        // 起動時の位置復元が終わるまでは保存しない。
+        // (復元前はリストがトップに出ているので、保存するとしおりがトップに上書きされてしまう)
+        guard restoreDone else { return }
         guard let id = currentBlockID,
               let target = blocks.first(where: { $0.persistentModelID == id }) else { return }
         var changed = false
@@ -313,17 +487,6 @@ struct PassageListView: View {
         if changed { try? context.save() }
     }
 
-    /// 起動後、前回のしおり位置へ一度だけスクロールする
-    private func restoreLastPositionIfNeeded(_ proxy: ScrollViewProxy) {
-        guard !didRestore else { return }
-        didRestore = true
-        guard let marked = blocks.first(where: { $0.isMarked }) else { return }
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(0.3))
-            withAnimation { proxy.scrollTo(marked.persistentModelID, anchor: .center) }
-        }
-    }
-
     private func delete(_ block: Block) {
         let passage = block.passage
         context.delete(block)
@@ -332,29 +495,6 @@ struct PassageListView: View {
             context.delete(passage)
         }
         try? context.save()
-    }
-
-    private func deleteSelected() {
-        let ids = selection
-        let targets = blocks.filter { ids.contains($0.persistentModelID) }
-        var affectedPassages: [PersistentIdentifier: Passage] = [:]
-        for block in targets {
-            if let passage = block.passage {
-                affectedPassages[passage.persistentModelID] = passage
-            }
-            context.delete(block)
-        }
-        // ブロックがなくなった文章は本体ごと削除する
-        for passage in affectedPassages.values {
-            if passage.blocks.filter({ !ids.contains($0.persistentModelID) }).isEmpty {
-                context.delete(passage)
-            }
-        }
-        try? context.save()
-        withAnimation {
-            selection.removeAll()
-            isSelecting = false
-        }
     }
 
     private func toggle(_ block: Block) {
