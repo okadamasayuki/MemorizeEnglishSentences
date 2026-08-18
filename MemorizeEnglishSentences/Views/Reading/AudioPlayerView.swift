@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 教材音声(MP3)の連続再生プレイヤー画面。
 /// いま読んでいる英文を大きく表示し、再生位置の単語をハイライト、下に和訳を表示する。
@@ -10,6 +11,8 @@ struct AudioPlayerView: View {
     @AppStorage("listenSpeed") private var listenSpeed = 1.0
     /// 各英文の後にその文の和訳をTTSで読むか(全項目共通・記憶)
     @AppStorage("audioJaAfterSentence") private var jaAfterSentence = false
+    /// 和訳を英文の上に表示するか(文のどこかを長押しで入れ替え。全項目共通・記憶)
+    @AppStorage("audioJaFirst") private var jaFirst = false
     /// 現在ブロックの文ごと再生回数(表示用。保存は SentenceRepeatStore)
     @State private var counts: [Int] = []
     /// ブロック全体の繰り返し回数(全項目共通)
@@ -56,10 +59,10 @@ struct AudioPlayerView: View {
                         .foregroundStyle(jaAfterSentence ? Color.white : Color.primary)
                 }
                 .buttonStyle(.plain)
-                // ブロック全体(×1,×2,×1の一式)を何回再生するか(全項目共通)。
-                // タップするたびに ×1→×2→×3→×1… と切り替わる
+                // ブロック全体(文ごとの一式)を何回再生するか(全項目共通)。
+                // ×3は使わないため廃止し、タップで ×1↔×2 を切り替える
                 Button {
-                    setBlockCount(blockCount % 3 + 1)
+                    setBlockCount(blockCount == 1 ? 2 : 1)
                 } label: {
                     Text("×\(blockCount)")
                         .font(.footnote.weight(.semibold).monospacedDigit())
@@ -198,12 +201,20 @@ struct AudioPlayerView: View {
                     ForEach(Array(segments.enumerated()), id: \.offset) { i, seg in
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             VStack(alignment: .leading, spacing: 6) {
+                                // 英文と和訳の表示順(長押しで入れ替え。和訳→英文は和文英訳の練習用)
+                                if jaFirst, !seg.ja.isEmpty {
+                                    Text(seg.ja)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.leading)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
                                 AudioSegmentHighlightView(text: seg.en, segmentRange: seg.range,
                                                           highlight: isCurrent ? audio.highlight : Self.idleHighlight)
                                     .font(.title3.weight(.medium))
                                     .multilineTextAlignment(.leading)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                if !seg.ja.isEmpty {
+                                if !jaFirst, !seg.ja.isEmpty {
                                     Text(seg.ja)
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
@@ -216,24 +227,21 @@ struct AudioPlayerView: View {
                             .onTapGesture(count: 2) {
                                 if isCurrent { audio.playSegment(i) }
                             }
+                            // 長押しで英文と和訳の上下を入れ替える(全文・全項目に効く。記憶される)
+                            .onLongPressGesture {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    jaFirst.toggle()
+                                }
+                            }
                             // ×0は薄く表示(スキップされる文)
                             .opacity(countFor(i) == 0 ? 0.35 : 1)
 
-                            // この文の再生回数(タップ→メニューから直接選択。記憶される)。
+                            // この文の再生回数(記憶される)。×3は廃止し、タップで ×1↔×2。
                             // 表示中のページだけに出す(スワイプ途中の隣ページには出さない)
                             if isCurrent {
-                                Menu {
-                                    ForEach([0, 1, 2, 3], id: \.self) { n in
-                                        Button {
-                                            setCount(i, n)
-                                        } label: {
-                                            if countFor(i) == n {
-                                                Label("×\(n)", systemImage: "checkmark")
-                                            } else {
-                                                Text("×\(n)")
-                                            }
-                                        }
-                                    }
+                                Button {
+                                    setCount(i, countFor(i) == 1 ? 2 : 1)
                                 } label: {
                                     Text("×\(countFor(i))")
                                         .font(.footnote.weight(.semibold).monospacedDigit())
@@ -246,19 +254,36 @@ struct AudioPlayerView: View {
                                         .foregroundStyle(countFor(i) > 1 ? Color.white
                                                          : (countFor(i) == 0 ? Color.secondary : Color.primary))
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
                 }
                 .padding(.horizontal, 24)
             } else if let item {
+                if jaFirst, !item.japanese.isEmpty {
+                    Text(item.japanese)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 16)
+                }
                 SentenceHighlightView(text: item.english, highlight: isCurrent ? audio.highlight : Self.idleHighlight)
                     .font(.title2.weight(.medium))
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)
+                    // 長押しで英文と和訳の上下を入れ替える(記憶される)
+                    .onLongPressGesture {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            jaFirst.toggle()
+                        }
+                    }
 
-                if !item.japanese.isEmpty {
+                if !jaFirst, !item.japanese.isEmpty {
                     Text(item.japanese)
                         .font(.body)
                         .foregroundStyle(.secondary)

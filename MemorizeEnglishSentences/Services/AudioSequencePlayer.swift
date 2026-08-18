@@ -86,6 +86,17 @@ enum SentenceRepeatStore {
         get { max(1, UserDefaults.standard.integer(forKey: blockGlobalKey)) }
         set { UserDefaults.standard.set(newValue, forKey: blockGlobalKey) }
     }
+
+    /// 回数設定を全て既定(×1)へ戻す一度きりの掃除。
+    /// ×3廃止・×1↔×2トグル化(2026-08-18の要望)に合わせて、
+    /// それまでにちょこちょこ変えた保存値をリセットする。
+    static func resetAllToOneIfNeeded() {
+        let doneKey = "didResetRepeatsToOne_v1"
+        guard !UserDefaults.standard.bool(forKey: doneKey) else { return }
+        UserDefaults.standard.removeObject(forKey: defaultsKey)
+        globalBlockCount = 1
+        UserDefaults.standard.set(true, forKey: doneKey)
+    }
 }
 
 /// 再生進捗(現在位置と合計時間)。高頻度更新なので本体と分離して監視させる。
