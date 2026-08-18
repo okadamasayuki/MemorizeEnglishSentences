@@ -35,6 +35,14 @@ struct RootTabView: View {
                 ImprovementListView()
             }
         }
+        // 動作検証用: memoeng://tab/3 のようなURLでタブを切り替えられる
+        // (シミュレーターで切替の重さを自動計測するのに使う)
+        .onOpenURL { url in
+            if url.host() == "tab", let value = Int(url.lastPathComponent) {
+                PerfLog.log("tab -> \(value) (url)")
+                selection = value
+            }
+        }
         .task {
             // 一度きりの初期化・移行(フラグ済みなら即 return で軽い)
             SampleData.seedIfNeeded(context: context)

@@ -40,14 +40,19 @@ struct IdiomListView: View {
     @State private var warmupRetryCount = 0
     @State private var wordConfiguration: TranslationSession.Configuration?
 
-    /// 登録されている級の一覧(易→難: 2級→準1級→1級)
-    private var levels: [String] {
+    /// 登録されている級の一覧(易→難: 2級→準1級→1級)。
+    /// 読み込み時に1回だけ計算して保持する。computed にすると、ツールバーの
+    /// 級Pickerの Binding(get:) からレイアウトのたびに何千回も呼ばれ、
+    /// 1000件走査(1.3ms)×数千回=タブ切替のたびに数秒のフリーズになっていた。
+    @State private var levels: [String] = []
+
+    private func computeLevels() {
         var seen: [String] = []
         for idiom in allIdioms where !seen.contains(idiom.level) {
             seen.append(idiom.level)
         }
         let order = ["2級", "準1級", "1級"]
-        return seen.sorted { a, b in
+        levels = seen.sorted { a, b in
             let ia = order.firstIndex(of: a) ?? order.count
             let ib = order.firstIndex(of: b) ?? order.count
             return ia == ib ? a < b : ia < ib
@@ -60,7 +65,9 @@ struct IdiomListView: View {
 
     /// 表示対象(選択中の級だけ)
     private var idioms: [Idiom] {
-        allIdioms.filter { $0.level == effectiveLevel }
+        PerfLog.measure("idioms filter") {
+            allIdioms.filter { $0.level == effectiveLevel }
+        }
     }
 
     /// 読み込みが済んだか(済む前に「まだありません」を出さないため)
@@ -73,10 +80,12 @@ struct IdiomListView: View {
         PerfLog.measure("idiom fetch") {
             let descriptor = FetchDescriptor<Idiom>(sortBy: [SortDescriptor(\.number)])
             allIdioms = (try? context.fetch(descriptor)) ?? []
+            computeLevels()
         }
     }
 
     var body: some View {
+        let _ = PerfLog.log("IdiomListView body")
         NavigationStack {
             Group {
                 if !didLoad {
@@ -116,6 +125,7 @@ struct IdiomListView: View {
                                             allIdioms.removeAll { $0.persistentModelID == idiom.persistentModelID }
                                             context.delete(idiom)
                                             try? context.save()
+                                            computeLevels()
                                         } label: {
                                             Image(systemName: "trash")
                                         }
