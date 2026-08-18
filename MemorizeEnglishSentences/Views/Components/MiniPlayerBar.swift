@@ -49,24 +49,18 @@ struct MiniPlayerBar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            // 今読んでいる文(英語を読んでいる時は英文、和訳を読んでいる時は和訳)
-            VStack(alignment: .leading, spacing: 2) {
-                if let idx = audio.sequenceIndex {
-                    Text("\(idx + 1) / \(audio.itemCount)")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-                Text(displayText)
-                    .font(.footnote)
-                    .lineLimit(3)
-                    .truncationMode(.tail)
-                    .multilineTextAlignment(.leading)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // 今読んでいる文(英語を読んでいる時は英文、和訳を読んでいる時は和訳)。
+            // 番号(N/240)や×は置かず、文の表示にスペースを使い切る
+            Text(displayText)
+                .font(.footnote)
+                .lineLimit(3)
+                .truncationMode(.tail)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             // 一時停止 / 再開
             Button {
-                if audio.isPaused { audio.resume() } else { audio.pause() }
+                togglePause()
             } label: {
                 Image(systemName: audio.isPaused ? "play.fill" : "pause.fill")
                     .font(.body)
@@ -74,21 +68,23 @@ struct MiniPlayerBar: View {
                     .frame(width: 32, height: 32)
             }
             .buttonStyle(.plain)
-
-            // 停止(ミニプレイヤーも消える)
-            Button {
-                audio.stop()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 32)
-            }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, 12)
         .contentShape(Rectangle())
         .onTapGesture { onOpen() }
+        // 左右どちらへのスワイプでも一時停止/再開(一時停止ボタンと同じ動き)
+        .gesture(
+            DragGesture(minimumDistance: 30)
+                .onEnded { value in
+                    if abs(value.translation.width) > 40, abs(value.translation.width) > abs(value.translation.height) {
+                        togglePause()
+                    }
+                }
+        )
+    }
+
+    private func togglePause() {
+        if audio.isPaused { audio.resume() } else { audio.pause() }
     }
 
     /// 表示する文: 和訳の読み上げ中は和訳、それ以外は英文
