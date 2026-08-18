@@ -13,29 +13,7 @@ struct RootTabView: View {
     @State private var showFullPlayerFromMini = false
 
     var body: some View {
-        // 教材音声の再生中は、どのタブでも下部にミニプレイヤーを出す
-        // (プレイヤーを下スワイプで閉じても再生は続き、ここから戻れる)。
-        // safeAreaInset だとタブバーに重なって押せなくなるため、
-        // タブバーの上に載せる専用API(tabViewBottomAccessory, iOS 26)を使う
-        Group {
-            if #available(iOS 26.0, *) {
-                tabs.tabViewBottomAccessory {
-                    if audioActive {
-                        MiniPlayerBar { showFullPlayerFromMini = true }
-                    }
-                }
-            } else {
-                tabs
-            }
-        }
-        .sheet(isPresented: $showFullPlayerFromMini) {
-            AudioPlayerView()
-        }
-        .onReceive(AudioSequencePlayer.shared.$isPlayingSequence) { playing in
-            if audioActive != playing {
-                withAnimation(.easeInOut(duration: 0.2)) { audioActive = playing }
-            }
-        }
+        tabs
         // 動作検証用: memoeng://tab/3 のようなURLでタブを切り替えられる
         // (シミュレーターで切替の重さを自動計測するのに使う)
         .onOpenURL { url in
@@ -95,17 +73,21 @@ struct RootTabView: View {
         )) {
             Tab("音読", systemImage: "book.fill", value: 0) {
                 PassageListView(reselectSignal: readingReselect)
+                    .miniPlayerHost()
             }
             // 例文を音読しながら熟語を覚えるタブ
             Tab("熟語", systemImage: "text.book.closed.fill", value: 3) {
                 IdiomListView()
+                    .miniPlayerHost()
             }
             Tab("暗記", systemImage: "brain.fill", value: 1) {
                 RecallListView()
+                    .miniPlayerHost()
             }
             // アプリへの改善要望を書き留めて、Mac の Claude Code へ送るタブ
             Tab("改善", systemImage: "lightbulb", value: 4) {
                 ImprovementListView()
+                    .miniPlayerHost()
             }
         }
     }

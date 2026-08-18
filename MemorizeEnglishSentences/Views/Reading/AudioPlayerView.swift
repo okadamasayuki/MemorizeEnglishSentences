@@ -224,7 +224,9 @@ struct AudioPlayerView: View {
                                 if jaFirst, !seg.ja.isEmpty {
                                     Text(seg.ja)
                                         .font(.subheadline)
-                                        .foregroundStyle(.secondary)
+                                        // 和訳の読み上げ中はその文の和訳をハイライトする
+                                        .foregroundStyle(isCurrent && audio.speakingJaSegment == i
+                                                         ? Color.accentColor : Color.secondary)
                                         .multilineTextAlignment(.leading)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
@@ -236,7 +238,9 @@ struct AudioPlayerView: View {
                                 if !jaFirst, !seg.ja.isEmpty {
                                     Text(seg.ja)
                                         .font(.subheadline)
-                                        .foregroundStyle(.secondary)
+                                        // 和訳の読み上げ中はその文の和訳をハイライトする
+                                        .foregroundStyle(isCurrent && audio.speakingJaSegment == i
+                                                         ? Color.accentColor : Color.secondary)
                                         .multilineTextAlignment(.leading)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }

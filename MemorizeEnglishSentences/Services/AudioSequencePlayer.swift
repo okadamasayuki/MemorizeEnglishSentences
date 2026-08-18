@@ -123,6 +123,10 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     @Published var sequenceIndex: Int?
     /// 今読んでいる文(ミニプレイヤーの表示用。文の切り替わり時だけ更新)
     @Published var currentSentence: String?
+    /// 今読んでいる文の和訳(ミニプレイヤーで和訳読み上げ中に表示する)
+    @Published var currentSentenceJa: String?
+    /// いま和訳を読み上げ中の文番号(和訳のハイライト表示用。読んでいない時は nil)
+    @Published var speakingJaSegment: Int?
 
     private var items: [AudioPlaybackItem] = []
     private var currentIndex = 0
@@ -619,6 +623,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     /// この文の和訳を読み上げる。事前生成音声(VOICEVOX)があればそれを再生し、無い文だけTTSで読む
     private func speakJa(_ ja: String) {
         isSpeakingJa = true
+        speakingJaSegment = curSeg
         jaStartedAt = CFAbsoluteTimeGetCurrent()
         if items.indices.contains(currentIndex),
            let url = JaAudioStore.url(forBlockText: items[currentIndex].english, segmentIndex: curSeg),
@@ -702,12 +707,16 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         }
         let item = items[currentIndex]
         let text: String
+        let ja: String
         if let segs = item.segments, segs.indices.contains(curSeg) {
             text = segs[curSeg].en
+            ja = segs[curSeg].ja
         } else {
             text = item.english
+            ja = item.japanese
         }
         if currentSentence != text { currentSentence = text }
+        if currentSentenceJa != ja { currentSentenceJa = ja }
     }
 
     /// この文の和訳(文ペアがあればその文の和訳、無いブロックは全訳)
@@ -732,6 +741,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     private func cancelJaSpeech(resume: Bool = false) {
         guard isSpeakingJa else { return }
         isSpeakingJa = false
+        speakingJaSegment = nil
         let wasLead = jaLeadPending
         jaLeadPending = false
         jaPlayer?.stop()
@@ -837,6 +847,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
                 self.jaPlayer = nil
                 guard self.isSpeakingJa else { return }
                 self.isSpeakingJa = false
+                self.speakingJaSegment = nil
                 guard self.isPlayingSequence, !self.isPaused else { return }
                 if self.jaLeadPending {
                     self.jaLeadPending = false
@@ -861,6 +872,7 @@ extension AudioSequencePlayer: AVSpeechSynthesizerDelegate {
         DispatchQueue.main.async {
             guard self.isSpeakingJa else { return }
             self.isSpeakingJa = false
+            self.speakingJaSegment = nil
             guard self.isPlayingSequence, !self.isPaused else { return }
             if self.jaLeadPending {
                 self.jaLeadPending = false
@@ -874,6 +886,7 @@ extension AudioSequencePlayer: AVSpeechSynthesizerDelegate {
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         DispatchQueue.main.async {
             self.isSpeakingJa = false
+            self.speakingJaSegment = nil
         }
     }
 }
