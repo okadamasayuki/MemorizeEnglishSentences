@@ -50,13 +50,15 @@ struct MiniPlayerBar: View {
     var body: some View {
         HStack(spacing: 10) {
             // 今読んでいる文(英語を読んでいる時は英文、和訳を読んでいる時は和訳)。
-            // 番号(N/240)や×は置かず、文の表示にスペースを使い切る
+            // 番号(N/240)や×は置かず、文の表示にスペースを使い切る。
+            // 行数で縦幅が変わらないよう、3行分の高さに固定する
             Text(displayText)
                 .font(.footnote)
                 .lineLimit(3)
                 .truncationMode(.tail)
                 .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .frame(height: 54, alignment: .topLeading)
 
             // 一時停止 / 再開
             Button {
