@@ -74,11 +74,13 @@ struct MiniPlayerBar: View {
         .padding(.horizontal, 12)
         .contentShape(Rectangle())
         .onTapGesture { onOpen() }
-        // 左右どちらへのスワイプでも停止(全画面プレイヤーの✕と同じ挙動。ミニプレイヤーも消える)
+        // 左右・下方向どのスワイプでも停止(全画面プレイヤーの✕と同じ挙動。ミニプレイヤーも消える)
         .gesture(
             DragGesture(minimumDistance: 30)
                 .onEnded { value in
-                    if abs(value.translation.width) > 40, abs(value.translation.width) > abs(value.translation.height) {
+                    let horizontal = abs(value.translation.width) > 40
+                    let downward = value.translation.height > 40
+                    if horizontal || downward {
                         audio.stop()
                     }
                 }
