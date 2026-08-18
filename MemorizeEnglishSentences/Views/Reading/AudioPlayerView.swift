@@ -289,11 +289,6 @@ struct AudioPlayerView: View {
                             // 表示中のページだけに出す(スワイプ途中の隣ページには出さない)
                             if isCurrent {
                                 VStack(spacing: 8) {
-                                    // 上の丸=文頭が変(押すと赤くなり改善タブへ自動追加)
-                                    reportLabeledDot("頭", reported: reportedHeads.contains(i)) {
-                                        reportedHeads.insert(i)
-                                        reportSegmentIssue(seg: seg, index: i, part: "文頭")
-                                    }
                                     Button {
                                         setCount(i, countFor(i) == 1 ? 2 : 1)
                                     } label: {
@@ -309,7 +304,12 @@ struct AudioPlayerView: View {
                                                              : (countFor(i) == 0 ? Color.secondary : Color.primary))
                                     }
                                     .buttonStyle(.plain)
-                                    // 下の丸=文末が変
+                                    // 頭=文頭が変(押すと赤くなり改善タブへ自動追加)
+                                    reportLabeledDot("頭", reported: reportedHeads.contains(i)) {
+                                        reportedHeads.insert(i)
+                                        reportSegmentIssue(seg: seg, index: i, part: "文頭")
+                                    }
+                                    // 末=文末が変
                                     reportLabeledDot("末", reported: reportedTails.contains(i)) {
                                         reportedTails.insert(i)
                                         reportSegmentIssue(seg: seg, index: i, part: "文末")
