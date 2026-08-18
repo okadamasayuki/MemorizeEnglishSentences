@@ -22,6 +22,9 @@ struct AudioPlayerView: View {
     /// このブロックで報告済みの文番号(押した丸を赤く塗る目印)
     @State private var reportedHeads: Set<Int> = []
     @State private var reportedTails: Set<Int> = []
+    /// ページめくりの選択状態。プレイヤー内部の更新を待つと
+    /// スワイプが一瞬引き戻される変なモーションになるため、ローカルで即時に持つ
+    @State private var pageSelection = 0
 
     // 教材音声はレート変換の音質を考慮して 0.5〜2x
     private let speedOptions: [Double] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
@@ -104,15 +107,12 @@ struct AudioPlayerView: View {
 
             // いま読んでいるブロック。暗記タブと同じページめくり(指に追従)で
             // 左右スワイプすると前後の項目へ移動し、その項目の頭から再生される。
-            TabView(selection: Binding(
-                get: { audio.sequenceIndex ?? 0 },
-                set: { audio.jump(to: $0) }
-            )) {
+            TabView(selection: $pageSelection) {
                 // TabView(.page) は全ページを一度に作ってしまうため、
                 // 表示中と左右1ページ以外は空にして軽くする(240項目で顕著に効く)
                 ForEach(0..<max(audio.itemCount, 1), id: \.self) { index in
                     Group {
-                        if abs(index - (audio.sequenceIndex ?? 0)) <= 1 {
+                        if abs(index - pageSelection) <= 1 {
                             page(index)
                         } else {
                             Color.clear
@@ -122,6 +122,16 @@ struct AudioPlayerView: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
+            // スワイプでページが替わったら再生をその項目へ移す(モーションはTabView任せ)
+            .onChange(of: pageSelection) { _, newValue in
+                if newValue != (audio.sequenceIndex ?? 0) {
+                    audio.jump(to: newValue)
+                }
+            }
+            // 自動で次の項目へ進んだ時などは、ページ表示を追従させる
+            .onReceive(audio.$sequenceIndex) { idx in
+                if let idx, idx != pageSelection { pageSelection = idx }
+            }
 
             // 再生時間スライダー(×2などの回数設定を織り込んだ合計時間)
             AudioProgressSlider(progress: audio.progress) { value in
@@ -196,6 +206,7 @@ struct AudioPlayerView: View {
         }
         .onAppear {
             syncCounts()
+            pageSelection = audio.sequenceIndex ?? 0
         }
         // ブロックが変わったら、そのブロックの保存済み回数設定を読み込む
         .onChange(of: audio.sequenceIndex) { _, _ in
