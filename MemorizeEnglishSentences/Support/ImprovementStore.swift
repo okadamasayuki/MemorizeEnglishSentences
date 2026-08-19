@@ -5,6 +5,8 @@ struct Improvement: Identifiable, Codable, Equatable {
     var id = UUID()
     var text: String
     var createdAt = Date()
+    /// 添付(写真・動画)のファイル名。実体は Documents/improve_media/ に置く
+    var attachments: [String]? = nil
 }
 
 /// 改善要望を端末に保管する。
@@ -28,10 +30,19 @@ final class ImprovementStore: ObservableObject {
         load()
     }
 
-    func add(_ text: String) {
+    /// 添付ファイル(写真・動画)の置き場
+    static var mediaDir: URL {
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("improve_media")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    func add(_ text: String, attachments: [String]? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        items.insert(Improvement(text: trimmed), at: 0)
+        guard !trimmed.isEmpty || !(attachments ?? []).isEmpty else { return }
+        items.insert(Improvement(text: trimmed.isEmpty ? "(添付のみ)" : trimmed,
+                                 attachments: attachments), at: 0)
         save()
     }
 
@@ -43,6 +54,12 @@ final class ImprovementStore: ObservableObject {
     }
 
     func remove(_ id: UUID) {
+        // 添付の実体ファイルも一緒に片付ける
+        if let item = items.first(where: { $0.id == id }) {
+            for name in item.attachments ?? [] {
+                try? FileManager.default.removeItem(at: Self.mediaDir.appendingPathComponent(name))
+            }
+        }
         items.removeAll { $0.id == id }
         save()
     }

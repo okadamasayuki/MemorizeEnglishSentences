@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -28,6 +29,11 @@ struct ImprovementListView: View {
     @State private var reachable: Bool?
     /// 再接続の矢印の回転角。押すたびに一回転させ、押せたことを見せる
     @State private var spinAngle = 0.0
+
+    /// 下書きに付ける添付(保存済みファイル名)
+    @State private var draftAttachments: [String] = []
+    /// フォトピッカーの選択
+    @State private var pickedItems: [PhotosPickerItem] = []
 
     @FocusState private var editFocused: Bool
 
@@ -109,6 +115,24 @@ struct ImprovementListView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(dictation.isRecording ? .red : Color.accentColor)
 
+                // 写真・動画の添付(スクショでの報告用)
+                PhotosPicker(selection: $pickedItems, maxSelectionCount: 3,
+                             matching: .any(of: [.images, .videos])) {
+                    Image(systemName: "photo.on.rectangle")
+                        .font(.footnote.weight(.semibold))
+                        .frame(minWidth: 30, minHeight: 20)
+                }
+                .buttonStyle(.bordered)
+                .onChange(of: pickedItems) { _, items in
+                    Task { await importPicked(items) }
+                }
+
+                if !draftAttachments.isEmpty {
+                    Text("📎\(draftAttachments.count)")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
                 Spacer()
 
                 // 言い直したくなったときに、書きかけを一息で捨てる
@@ -126,7 +150,8 @@ struct ImprovementListView: View {
                     .buttonStyle(.bordered)
                     .font(.subheadline.weight(.semibold))
                     .frame(minHeight: 28)
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                              && draftAttachments.isEmpty)
             }
 
             if let problem = dictation.errorMessage {
@@ -187,9 +212,14 @@ struct ImprovementListView: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.text)
-                Text(item.createdAt, format: .dateTime.month().day().hour().minute())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(item.createdAt, format: .dateTime.month().day().hour().minute())
+                    if let n = item.attachments?.count, n > 0 {
+                        Text("📎\(n)")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if sendingIDs.contains(item.id) {
@@ -286,6 +316,10 @@ struct ImprovementListView: View {
     private func clearDraft() {
         draft = ""
         dictationBase = ""
+        for name in draftAttachments {
+            try? FileManager.default.removeItem(at: ImprovementStore.mediaDir.appendingPathComponent(name))
+        }
+        draftAttachments = []
         if dictation.isRecording { dictation.restartClean() }
         UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
     }
@@ -303,10 +337,28 @@ struct ImprovementListView: View {
             syncDraftFromDictation()
             resumePlayerIfNeeded()
         }
-        store.add(draft)
+        store.add(draft, attachments: draftAttachments.isEmpty ? nil : draftAttachments)
         draft = ""
         dictationBase = ""
+        draftAttachments = []
+        pickedItems = []
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+
+    /// フォトピッカーの選択を Documents/improve_media へ取り込む
+    private func importPicked(_ items: [PhotosPickerItem]) async {
+        for item in items {
+            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+            guard data.count < 120_000_000 else { continue }  // 極端に大きい動画は避ける
+            let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "bin"
+            let name = "\(UUID().uuidString).\(ext)"
+            try? data.write(to: ImprovementStore.mediaDir.appendingPathComponent(name))
+            draftAttachments.append(name)
+        }
+        pickedItems = []
+        if !draftAttachments.isEmpty {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
     }
 
     private func send(_ item: Improvement) {
