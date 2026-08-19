@@ -250,18 +250,34 @@ struct ImprovementListView: View {
 
     // MARK: - 操作
 
+    /// 書き取りのために一時停止したか(終わったら自動で再開する)
+    @State private var pausedPlayerForDictation = false
+
     private func toggleDictation() {
         if dictation.isRecording {
             dictation.stop()
             syncDraftFromDictation()
+            resumePlayerIfNeeded()
         } else {
-            // マイクは一つ。再生中の音声は止めてから書き取りに入る
+            // マイクは一つ。再生中の音声は「停止」ではなく「一時停止」にして、
+            // ミニプレイヤーを残す(書き取りが終わったら自動で再開)
             SpeechSynthesisService.shared.stop()
-            AudioSequencePlayer.shared.stop()
+            let audio = AudioSequencePlayer.shared
+            if audio.isPlayingSequence, !audio.isPaused {
+                audio.pause()
+                pausedPlayerForDictation = true
+            }
             dictationBase = draft.trimmingCharacters(in: .whitespacesAndNewlines)
             dictation.reset()
             dictation.autoRestart = true
             Task { await dictation.start() }
+        }
+    }
+
+    private func resumePlayerIfNeeded() {
+        if pausedPlayerForDictation {
+            pausedPlayerForDictation = false
+            AudioSequencePlayer.shared.resume()
         }
     }
 
@@ -285,6 +301,7 @@ struct ImprovementListView: View {
         if dictation.isRecording {
             dictation.stop()
             syncDraftFromDictation()
+            resumePlayerIfNeeded()
         }
         store.add(draft)
         draft = ""

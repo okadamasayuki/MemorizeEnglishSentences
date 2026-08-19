@@ -240,6 +240,7 @@ struct AudioPlayerView: View {
     private func page(_ index: Int) -> some View {
         let item = audio.item(at: index)
         let isCurrent = index == audio.sequenceIndex
+        ScrollViewReader { proxy in
         ScrollView {
             if let item, let segments = item.segments {
                 VStack(alignment: .leading, spacing: 18) {
@@ -286,6 +287,7 @@ struct AudioPlayerView: View {
                             }
                             // ×0は薄く表示(スキップされる文)
                             .opacity(countFor(i) == 0 ? 0.35 : 1)
+                            .id(i)
 
                             // この文の再生回数(記憶される)。×3は廃止し、タップで ×1↔×2。
                             // 表示中のページだけに出す(スワイプ途中の隣ページには出さない)
@@ -360,6 +362,15 @@ struct AudioPlayerView: View {
                         .padding(.top, 16)
                 }
             }
+        }
+        // 長いブロックでは、再生中の文が見えない位置に来たら最小限だけ自動スクロールする
+        // (短いブロックでは何も動かない。anchor無指定=見える位置まで)
+        .onReceive(audio.$currentSegmentIndex) { seg in
+            guard isCurrent, let seg else { return }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                proxy.scrollTo(seg, anchor: nil)
+            }
+        }
         }
     }
 

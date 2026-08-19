@@ -127,6 +127,8 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     @Published var currentSentenceJa: String?
     /// いま和訳を読み上げ中の文番号(和訳のハイライト表示用。読んでいない時は nil)
     @Published var speakingJaSegment: Int?
+    /// いま再生中の文番号(長いブロックの自動スクロール用。文の切り替わり時だけ更新)
+    @Published var currentSegmentIndex: Int?
 
     private var items: [AudioPlaybackItem] = []
     private var currentIndex = 0
@@ -715,6 +717,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         }
         if currentSentence != text { currentSentence = text }
         if currentSentenceJa != ja { currentSentenceJa = ja }
+        if currentSegmentIndex != curSeg { currentSegmentIndex = curSeg }
     }
 
     /// この文の和訳(文ペアがあればその文の和訳、無いブロックは全訳)
