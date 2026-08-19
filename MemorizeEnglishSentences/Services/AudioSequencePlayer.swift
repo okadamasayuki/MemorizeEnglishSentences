@@ -185,6 +185,8 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     private var jaPlayer: AVAudioPlayer?
     /// 「和訳→英文」順で、いま文頭の和訳を読み上げ中(読み終えたら英文を流す)
     private var jaLeadPending = false
+    /// 一時停止のまま項目を移動した(次の startFile は再生せず一時停止で待つ)
+    private var startPaused = false
     /// いま和訳を読み上げ中か(ファイル再生・TTSどちらも)
     private var isSpeakingJa = false
     /// 和訳読み上げ用の日本語ボイス。端末に入っている中で最高品質のものを選ぶ
@@ -226,6 +228,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     func jump(to index: Int) {
         guard isPlayingSequence, items.indices.contains(index), index != currentIndex else { return }
         cancelJaSpeech()
+        startPaused = isPaused  // 一時停止中の移動は、移動先でも一時停止のまま待つ
         currentIndex = index
         playCurrent()
     }
@@ -259,6 +262,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     func skipToNext() {
         guard isPlayingSequence else { return }
         cancelJaSpeech()
+        startPaused = isPaused
         if currentIndex + 1 < items.count {
             currentIndex += 1
             playCurrent()
@@ -271,6 +275,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     func skipToPrevious() {
         guard isPlayingSequence else { return }
         cancelJaSpeech()
+        startPaused = isPaused
         currentIndex = max(0, currentIndex - 1)
         playCurrent()
     }
@@ -519,8 +524,13 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         isPaused = false
         rebuildWindows()
         progress.position = 0
-        // 「和訳→英文」順のときは、ブロック最初の文も和訳から
-        if jaAfterSentence, jaOrderFirst, let ja = jaText(forSegment: seg), !ja.isEmpty {
+        if startPaused {
+            // 一時停止のまま項目を移動してきた: 頭出しだけして再生は待つ
+            startPaused = false
+            isPaused = true
+            stopTimer()
+        } else if jaAfterSentence, jaOrderFirst, let ja = jaText(forSegment: seg), !ja.isEmpty {
+            // 「和訳→英文」順のときは、ブロック最初の文も和訳から
             jaLeadPending = true
             speakJa(ja)
             startTimer()  // 和訳中もスライダーを進める
