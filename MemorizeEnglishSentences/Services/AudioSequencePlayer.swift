@@ -469,13 +469,17 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
                 let gap = item.silences.last { $0.start >= segStart && $0.start <= boundary + 0.1 }
                 var end: Double
                 if let gap {
-                    end = gap.start + 0.15
+                    end = gap.start + 0.22
                 } else {
                     // 無音が見つからない場合: 次の文の0.35秒前で切る(最後の文は末尾まで)
                     end = boundary == .greatestFiniteMagnitude ? boundary : max(segStart, boundary - 0.35)
                 }
-                if let lastWordEnd, end < lastWordEnd + 0.12 {
-                    end = min(lastWordEnd + 0.12, boundary == .greatestFiniteMagnitude ? lastWordEnd + 0.12 : boundary)
+                if let lastWordEnd, end < lastWordEnd + 0.22 {
+                    end = lastWordEnd + 0.22
+                }
+                // 次の文の頭にはかぶせない
+                if boundary != .greatestFiniteMagnitude {
+                    end = min(end, boundary)
                 }
                 return end
             }
