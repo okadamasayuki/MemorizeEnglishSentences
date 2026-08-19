@@ -9,6 +9,9 @@ import UIKit
 /// その要望の実装を始める。
 struct ImprovementListView: View {
     @ObservedObject private var store = ImprovementStore.shared
+    @ObservedObject private var resultStore = ImprovementResultStore.shared
+    /// 全文表示する対応結果
+    @State private var resultDetail: ImprovementResult?
     /// 日本語の書き取り(長い口述でも切れないよう自動再開する)
     @State private var dictation = SpeechRecognitionService(locale: Locale(identifier: "ja-JP"))
 
@@ -42,7 +45,9 @@ struct ImprovementListView: View {
             List {
                 inputSection
                 if !store.items.isEmpty { pendingSection }
+                if !resultStore.results.isEmpty { resultsSection }
             }
+            .refreshable { resultStore.reload() }
             .listStyle(.insetGrouped)
             .scrollDismissesKeyboard(.immediately)
             .navigationTitle("改善")
@@ -52,7 +57,10 @@ struct ImprovementListView: View {
                     connectionStatus
                 }
             }
-            .onAppear { checkReachability() }
+            .onAppear {
+                checkReachability()
+                resultStore.reload()
+            }
             // 動作検証用: memoeng://improve/mic で書き取りを開始/終了できる
             // (シミュレーターで音声入力の消失を自動再現するのに使う)
             .onOpenURL { url in
@@ -75,6 +83,29 @@ struct ImprovementListView: View {
             // 全体を見渡しながら書き直せる広い欄をシートで出す。
             .sheet(item: $editTarget) { _ in
                 editSheet
+            }
+            // 対応結果の全文表示
+            .sheet(item: $resultDetail) { result in
+                NavigationStack {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(result.title)
+                                .font(.headline)
+                            Text(result.summary)
+                                .font(.body)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding()
+                    }
+                    .navigationTitle("対応内容")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("閉じる") { resultDetail = nil }
+                        }
+                    }
+                }
+                .presentationDetents([.medium, .large])
             }
         }
     }
@@ -245,6 +276,36 @@ struct ImprovementListView: View {
                 store.remove(item.id)
             } label: {
                 Label("削除", systemImage: "trash")
+            }
+        }
+    }
+
+    // MARK: - 対応済み(Claude Codeからの結果報告)
+
+    private var resultsSection: some View {
+        Section("対応済み") {
+            ForEach(resultStore.results) { result in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(result.title)
+                        .font(.subheadline.weight(.semibold))
+                    Text(result.summary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                    Text(result.completedAt, format: .dateTime.month().day().hour().minute())
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { resultDetail = result }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        resultStore.remove(result.id)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                }
             }
         }
     }

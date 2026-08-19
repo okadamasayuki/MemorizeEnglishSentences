@@ -1,5 +1,46 @@
 import Foundation
 
+/// Claude Code からの対応結果(要望ごとの「原因と直し方」のまとめ)。
+/// Mac 側が Documents/improve_results.json へ書き込み、改善タブの「対応済み」欄に出る。
+struct ImprovementResult: Identifiable, Codable, Equatable {
+    var id = UUID()
+    /// 要望の要約(1行)
+    var title: String
+    /// 原因と対応内容のまとめ
+    var summary: String
+    var completedAt = Date()
+}
+
+/// 対応結果の読み書き(ファイルが正、削除もファイルへ反映)
+final class ImprovementResultStore: ObservableObject {
+    static let shared = ImprovementResultStore()
+
+    @Published private(set) var results: [ImprovementResult] = []
+
+    private var fileURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("improve_results.json")
+    }
+
+    init() { reload() }
+
+    func reload() {
+        guard let data = try? Data(contentsOf: fileURL),
+              let decoded = try? JSONDecoder().decode([ImprovementResult].self, from: data) else {
+            results = []
+            return
+        }
+        results = decoded.sorted { $0.completedAt > $1.completedAt }
+    }
+
+    func remove(_ id: UUID) {
+        results.removeAll { $0.id == id }
+        if let data = try? JSONEncoder().encode(results) {
+            try? data.write(to: fileURL, options: .atomic)
+        }
+    }
+}
+
 /// アプリ自体への改善要望のひとつ。
 struct Improvement: Identifiable, Codable, Equatable {
     var id = UUID()
