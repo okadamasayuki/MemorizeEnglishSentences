@@ -22,6 +22,7 @@ struct AudioPlayerView: View {
     /// このブロックで報告済みの文番号(押した丸を赤く塗る目印)
     @State private var reportedHeads: Set<Int> = []
     @State private var reportedTails: Set<Int> = []
+    @State private var reportedJas: Set<Int> = []
     /// ページめくりの選択状態。プレイヤー内部の更新を待つと
     /// スワイプが一瞬引き戻される変なモーションになるため、ローカルで即時に持つ
     @State private var pageSelection = 0
@@ -226,6 +227,7 @@ struct AudioPlayerView: View {
             syncCounts()
             reportedHeads.removeAll()
             reportedTails.removeAll()
+            reportedJas.removeAll()
         }
     }
 
@@ -314,6 +316,11 @@ struct AudioPlayerView: View {
                                         reportedTails.insert(i)
                                         reportSegmentIssue(seg: seg, index: i, part: "文末")
                                     }
+                                    // 読=和訳の読み方がおかしい
+                                    reportLabeledDot("読", reported: reportedJas.contains(i)) {
+                                        reportedJas.insert(i)
+                                        reportJaReadingIssue(seg: seg, index: i)
+                                    }
                                 }
                             }
                         }
@@ -397,6 +404,19 @@ struct AudioPlayerView: View {
         }
         .buttonStyle(.plain)
         .disabled(reported)
+    }
+
+    /// 和訳の読み方がおかしい文の報告を改善タブの一覧へ書き込む(あとでスワイプしてMacへ送る)
+    private func reportJaReadingIssue(seg: AudioSegment, index: Int) {
+        let block = audio.currentItem?.english ?? ""
+        let report = """
+        【和訳の読み方修正】読み方がおかしい
+        和訳: \(seg.ja)
+        英文: \(seg.en)
+        (項目\((audio.sequenceIndex ?? 0) + 1)・文\(index + 1)、ブロック先頭: \(String(block.prefix(60)))…)
+        """
+        ImprovementStore.shared.add(report)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
     /// 切れ目が変な文の報告を改善タブの一覧へ書き込む(あとでスワイプしてMacへ送る)
