@@ -13,32 +13,27 @@ enum NowPlayingArtwork {
     private static let canvas = CGSize(width: 800, height: 800)
     private static let margin: CGFloat = 40
 
-    static func render(previous: Line?, current: Line, next: Line?, jaActive: Bool) -> UIImage {
-        // 文字はできるだけ大きく。入りきらない時は「次の文」から先に諦める
-        // (歩きながら「前の文なんだっけ」を確認する用途を優先する)
-        for scale in [1.0, 0.9, 0.8] {
-            if let image = tryRender(previous: previous, current: current, next: next,
-                                     jaActive: jaActive, scale: scale, force: false) {
-                return image
-            }
-        }
+    static func render(previous: Line?, current: Line, jaActive: Bool) -> UIImage {
+        // 表示は「前の文+今の文」の2文だけ(次の文は出さない)。
+        // 文字はできるだけ大きく、入りきらない時だけ縮める。
+        // それでも入らない長文は今の文だけを表示する。
         for scale in [1.0, 0.9, 0.8, 0.7] {
-            if let image = tryRender(previous: previous, current: current, next: nil,
+            if let image = tryRender(previous: previous, current: current,
                                      jaActive: jaActive, scale: scale, force: false) {
                 return image
             }
         }
         for scale in [1.0, 0.85, 0.7, 0.58, 0.48] {
-            if let image = tryRender(previous: nil, current: current, next: nil,
+            if let image = tryRender(previous: nil, current: current,
                                      jaActive: jaActive, scale: scale, force: false) {
                 return image
             }
         }
-        return tryRender(previous: nil, current: current, next: nil,
+        return tryRender(previous: nil, current: current,
                          jaActive: jaActive, scale: 0.48, force: true)!
     }
 
-    private static func tryRender(previous: Line?, current: Line, next: Line?,
+    private static func tryRender(previous: Line?, current: Line,
                                   jaActive: Bool, scale: CGFloat, force: Bool) -> UIImage? {
         let width = canvas.width - margin * 2
 
@@ -74,10 +69,10 @@ enum NowPlayingArtwork {
         let boxPadding: CGFloat = 22 * scale + 4
 
         if let previous {
-            let en = attr(previous.en, size: 32, weight: .semibold, color: dimEn)
+            let en = attr(previous.en, size: 38, weight: .semibold, color: dimEn)
             blocks.append(Block(text: en, height: height(en), inBox: false))
             if !previous.ja.isEmpty {
-                let ja = attr(previous.ja, size: 25, weight: .regular, color: dimJa)
+                let ja = attr(previous.ja, size: 29, weight: .regular, color: dimJa)
                 blocks.append(Block(text: ja, height: height(ja), inBox: false))
             }
         }
@@ -89,15 +84,6 @@ enum NowPlayingArtwork {
                                              : UIColor(white: 0.93, alpha: 1))
             blocks.append(Block(text: curJa, height: height(curJa), inBox: true))
         }
-        if let next {
-            let en = attr(next.en, size: 32, weight: .semibold, color: dimEn)
-            blocks.append(Block(text: en, height: height(en), inBox: false))
-            if !next.ja.isEmpty {
-                let ja = attr(next.ja, size: 25, weight: .regular, color: dimJa)
-                blocks.append(Block(text: ja, height: height(ja), inBox: false))
-            }
-        }
-
         // 全体の高さ(ハイライト枠のパディング込み)
         var total: CGFloat = 0
         var prevInBox = false

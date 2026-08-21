@@ -252,17 +252,17 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         }
         let item = items[currentIndex]
         let jaActive = speakingJaSegment != nil
-        var lines: (prev: NowPlayingArtwork.Line?, cur: NowPlayingArtwork.Line, next: NowPlayingArtwork.Line?)
+        var lines: (prev: NowPlayingArtwork.Line?, cur: NowPlayingArtwork.Line)
         if let segs = item.segments, segs.indices.contains(curSeg) {
             func line(_ i: Int) -> NowPlayingArtwork.Line? {
                 segs.indices.contains(i) ? .init(en: segs[i].en, ja: segs[i].ja) : nil
             }
-            lines = (line(curSeg - 1), line(curSeg) ?? .init(en: item.english, ja: item.japanese), line(curSeg + 1))
+            lines = (line(curSeg - 1), line(curSeg) ?? .init(en: item.english, ja: item.japanese))
         } else {
-            lines = (nil, .init(en: item.english, ja: item.japanese), nil)
+            lines = (nil, .init(en: item.english, ja: item.japanese))
         }
         let image = NowPlayingArtwork.render(previous: lines.prev, current: lines.cur,
-                                             next: lines.next, jaActive: jaActive)
+                                             jaActive: jaActive)
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: "音読 \(currentIndex + 1) / \(items.count)",
             MPNowPlayingInfoPropertyPlaybackRate: isPaused ? 0.0 : 1.0,
