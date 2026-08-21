@@ -364,11 +364,17 @@ struct AudioPlayerView: View {
             }
         }
         // 長いブロックでは、再生中の文が見えない位置に来たら最小限だけ自動スクロールする
-        // (短いブロックでは何も動かない。anchor無指定=見える位置まで)
+        // (短いブロックでは何も動かない)。次の文より「前の文」が見えることを優先する
+        // (歩きながら「前の文なんだっけ」を確認する用途)
         .onReceive(audio.$currentSegmentIndex) { seg in
             guard isCurrent, let seg else { return }
             withAnimation(.easeInOut(duration: 0.3)) {
                 proxy.scrollTo(seg, anchor: nil)
+            }
+            if seg > 0 {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    proxy.scrollTo(seg - 1, anchor: nil)
+                }
             }
         }
         }
