@@ -14,15 +14,28 @@ enum NowPlayingArtwork {
     private static let margin: CGFloat = 40
 
     static func render(previous: Line?, current: Line, next: Line?, jaActive: Bool) -> UIImage {
-        // 収まるまで文字サイズを段階的に縮める
-        for scale in [1.0, 0.85, 0.72, 0.6, 0.5, 0.42] {
+        // 文字はできるだけ大きく。入りきらない時は「次の文」から先に諦める
+        // (歩きながら「前の文なんだっけ」を確認する用途を優先する)
+        for scale in [1.0, 0.9, 0.8] {
             if let image = tryRender(previous: previous, current: current, next: next,
                                      jaActive: jaActive, scale: scale, force: false) {
                 return image
             }
         }
-        return tryRender(previous: previous, current: current, next: next,
-                         jaActive: jaActive, scale: 0.42, force: true)!
+        for scale in [1.0, 0.9, 0.8, 0.7] {
+            if let image = tryRender(previous: previous, current: current, next: nil,
+                                     jaActive: jaActive, scale: scale, force: false) {
+                return image
+            }
+        }
+        for scale in [1.0, 0.85, 0.7, 0.58, 0.48] {
+            if let image = tryRender(previous: nil, current: current, next: nil,
+                                     jaActive: jaActive, scale: scale, force: false) {
+                return image
+            }
+        }
+        return tryRender(previous: nil, current: current, next: nil,
+                         jaActive: jaActive, scale: 0.48, force: true)!
     }
 
     private static func tryRender(previous: Line?, current: Line, next: Line?,
@@ -61,26 +74,26 @@ enum NowPlayingArtwork {
         let boxPadding: CGFloat = 22 * scale + 4
 
         if let previous {
-            let en = attr(previous.en, size: 28, weight: .semibold, color: dimEn)
+            let en = attr(previous.en, size: 32, weight: .semibold, color: dimEn)
             blocks.append(Block(text: en, height: height(en), inBox: false))
             if !previous.ja.isEmpty {
-                let ja = attr(previous.ja, size: 22, weight: .regular, color: dimJa)
+                let ja = attr(previous.ja, size: 25, weight: .regular, color: dimJa)
                 blocks.append(Block(text: ja, height: height(ja), inBox: false))
             }
         }
-        let curEn = attr(current.en, size: 40, weight: .bold, color: .white)
+        let curEn = attr(current.en, size: 50, weight: .bold, color: .white)
         blocks.append(Block(text: curEn, height: height(curEn), inBox: true))
         if !current.ja.isEmpty {
-            let curJa = attr(current.ja, size: 30, weight: .semibold,
+            let curJa = attr(current.ja, size: 36, weight: .semibold,
                              color: jaActive ? UIColor(red: 0.55, green: 0.8, blue: 1, alpha: 1)
                                              : UIColor(white: 0.93, alpha: 1))
             blocks.append(Block(text: curJa, height: height(curJa), inBox: true))
         }
         if let next {
-            let en = attr(next.en, size: 28, weight: .semibold, color: dimEn)
+            let en = attr(next.en, size: 32, weight: .semibold, color: dimEn)
             blocks.append(Block(text: en, height: height(en), inBox: false))
             if !next.ja.isEmpty {
-                let ja = attr(next.ja, size: 22, weight: .regular, color: dimJa)
+                let ja = attr(next.ja, size: 25, weight: .regular, color: dimJa)
                 blocks.append(Block(text: ja, height: height(ja), inBox: false))
             }
         }
@@ -118,8 +131,12 @@ enum NowPlayingArtwork {
 
             let boxRect = CGRect(x: margin - 16, y: boxTop,
                                  width: width + 32, height: boxBottom - boxTop)
-            UIColor(red: 0.13, green: 0.22, blue: 0.42, alpha: 1).setFill()
-            UIBezierPath(roundedRect: boxRect, cornerRadius: 20).fill()
+            let boxPath = UIBezierPath(roundedRect: boxRect, cornerRadius: 20)
+            UIColor(red: 0.16, green: 0.30, blue: 0.58, alpha: 1).setFill()
+            boxPath.fill()
+            UIColor(white: 1, alpha: 0.55).setStroke()
+            boxPath.lineWidth = 3
+            boxPath.stroke()
 
             for (i, b) in blocks.enumerated() {
                 b.text.draw(with: CGRect(x: margin, y: positions[i], width: width, height: b.height),
