@@ -115,14 +115,14 @@ enum NowPlayingArtwork {
                 prevInBox = b.inBox
             }
 
-            let boxRect = CGRect(x: margin - 16, y: boxTop,
-                                 width: width + 32, height: boxBottom - boxTop)
-            let boxPath = UIBezierPath(roundedRect: boxRect, cornerRadius: 20)
-            UIColor(red: 0.16, green: 0.30, blue: 0.58, alpha: 1).setFill()
-            boxPath.fill()
-            UIColor(white: 1, alpha: 0.55).setStroke()
-            boxPath.lineWidth = 3
-            boxPath.stroke()
+            // 前の文があるときだけ、今の文の背後にごく薄い下地を敷いて「ここ」をやんわり示す。
+            // 1文だけのとき(大多数)は下地も枠も出さない(露骨な強調は不要という要望)。
+            if previous != nil {
+                let boxRect = CGRect(x: margin - 16, y: boxTop,
+                                     width: width + 32, height: boxBottom - boxTop)
+                UIColor(white: 1, alpha: 0.10).setFill()
+                UIBezierPath(roundedRect: boxRect, cornerRadius: 20).fill()
+            }
 
             for (i, b) in blocks.enumerated() {
                 b.text.draw(with: CGRect(x: margin, y: positions[i], width: width, height: b.height),
