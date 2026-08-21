@@ -243,22 +243,30 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         }
     }
 
-    /// ロック画面の表示を更新する(今読んでいる文=タイトル。和訳読み上げ中は和訳を出す)
+    /// ロック画面の表示を更新する。前後の文+今の文(英+和)をカラオケ風の
+    /// 画像に描いてアートワークとして出す(シス単アプリと同じ方式)
     private func updateNowPlaying() {
-        guard isPlayingSequence else {
+        guard isPlayingSequence, items.indices.contains(currentIndex) else {
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             return
         }
-        let title: String
-        if speakingJaSegment != nil, let ja = currentSentenceJa, !ja.isEmpty {
-            title = ja
+        let item = items[currentIndex]
+        let jaActive = speakingJaSegment != nil
+        var lines: (prev: NowPlayingArtwork.Line?, cur: NowPlayingArtwork.Line, next: NowPlayingArtwork.Line?)
+        if let segs = item.segments, segs.indices.contains(curSeg) {
+            func line(_ i: Int) -> NowPlayingArtwork.Line? {
+                segs.indices.contains(i) ? .init(en: segs[i].en, ja: segs[i].ja) : nil
+            }
+            lines = (line(curSeg - 1), line(curSeg) ?? .init(en: item.english, ja: item.japanese), line(curSeg + 1))
         } else {
-            title = currentSentence ?? "再生中"
+            lines = (nil, .init(en: item.english, ja: item.japanese), nil)
         }
+        let image = NowPlayingArtwork.render(previous: lines.prev, current: lines.cur,
+                                             next: lines.next, jaActive: jaActive)
         var info: [String: Any] = [
-            MPMediaItemPropertyTitle: title,
-            MPMediaItemPropertyArtist: "音読 \(currentIndex + 1) / \(items.count)",
+            MPMediaItemPropertyTitle: "音読 \(currentIndex + 1) / \(items.count)",
             MPNowPlayingInfoPropertyPlaybackRate: isPaused ? 0.0 : 1.0,
+            MPMediaItemPropertyArtwork: MPMediaItemArtwork(boundsSize: image.size) { _ in image },
         ]
         info[MPMediaItemPropertyPlaybackDuration] = progress.duration
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = progress.position
@@ -809,6 +817,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         guard let player else { return }
         let from = segReplayStarts.indices.contains(curSeg) ? segReplayStarts[curSeg] : (segStarts.indices.contains(curSeg) ? segStarts[curSeg] : 0)
         replay(from: from, player: player)
+        updateNowPlaying()
     }
 
     /// 和訳読み上げを中断する。resume=true なら教材音声の再生も再開する
