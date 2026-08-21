@@ -1,6 +1,7 @@
 import AVFoundation
 import CryptoKit
 import Foundation
+import MediaPlayer
 
 /// ブロック内の1文分(英文とその和訳、ブロック全文の中での位置と音声内の開始時刻)
 struct AudioSegment {
@@ -209,6 +210,57 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     private override init() {
         super.init()
         jaSynthesizer.delegate = self
+        setupRemoteCommands()
+    }
+
+    // MARK: - ロック画面の再生中表示(Now Playing)
+
+    /// ロック画面・コントロールセンターの再生/一時停止/前後ボタンを受け付ける
+    private func setupRemoteCommands() {
+        let center = MPRemoteCommandCenter.shared()
+        center.playCommand.addTarget { [weak self] _ in
+            guard let self, self.isPlayingSequence else { return .commandFailed }
+            self.resume(); return .success
+        }
+        center.pauseCommand.addTarget { [weak self] _ in
+            guard let self, self.isPlayingSequence else { return .commandFailed }
+            self.pause(); return .success
+        }
+        center.togglePlayPauseCommand.addTarget { [weak self] _ in
+            guard let self, self.isPlayingSequence else { return .commandFailed }
+            if self.isPaused { self.resume() } else { self.pause() }
+            return .success
+        }
+        center.nextTrackCommand.addTarget { [weak self] _ in
+            guard let self, self.isPlayingSequence else { return .commandFailed }
+            self.skipToNext(); return .success
+        }
+        center.previousTrackCommand.addTarget { [weak self] _ in
+            guard let self, self.isPlayingSequence else { return .commandFailed }
+            self.skipToPrevious(); return .success
+        }
+    }
+
+    /// ロック画面の表示を更新する(今読んでいる文=タイトル。和訳読み上げ中は和訳を出す)
+    private func updateNowPlaying() {
+        guard isPlayingSequence else {
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+            return
+        }
+        let title: String
+        if speakingJaSegment != nil, let ja = currentSentenceJa, !ja.isEmpty {
+            title = ja
+        } else {
+            title = currentSentence ?? "再生中"
+        }
+        var info: [String: Any] = [
+            MPMediaItemPropertyTitle: title,
+            MPMediaItemPropertyArtist: "音読 \(currentIndex + 1) / \(items.count)",
+            MPNowPlayingInfoPropertyPlaybackRate: isPaused ? 0.0 : 1.0,
+        ]
+        info[MPMediaItemPropertyPlaybackDuration] = progress.duration
+        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = progress.position
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
     /// 今読んでいるブロック
@@ -379,6 +431,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         }
         stopTimer()
         isPaused = true
+        updateNowPlaying()
     }
 
     /// 再開(止めたところから)
@@ -399,6 +452,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         } else {
             playCurrent()
         }
+        updateNowPlaying()
     }
 
     func stop() {
@@ -424,6 +478,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         blockPassesDone = 0
         curSeg = 0
         curRep = 0
+        updateNowPlaying()
     }
 
     // MARK: - 内部
@@ -639,6 +694,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         isSpeakingJa = true
         speakingJaSegment = curSeg
         jaStartedAt = CFAbsoluteTimeGetCurrent()
+        updateNowPlaying()
         if items.indices.contains(currentIndex),
            let url = JaAudioStore.url(forBlockText: items[currentIndex].english, segmentIndex: curSeg),
            let filePlayer = try? AVAudioPlayer(contentsOf: url) {
@@ -732,6 +788,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         if currentSentence != text { currentSentence = text }
         if currentSentenceJa != ja { currentSentenceJa = ja }
         if currentSegmentIndex != curSeg { currentSegmentIndex = curSeg }
+        updateNowPlaying()
     }
 
     /// この文の和訳(文ペアがあればその文の和訳、無いブロックは全訳)
