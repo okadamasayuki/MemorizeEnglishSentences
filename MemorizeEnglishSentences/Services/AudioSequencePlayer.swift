@@ -173,6 +173,8 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     private var jaStartedAt: CFAbsoluteTime = 0
     /// 和訳ファイルの長さのキャッシュ(パス→秒)
     private static var jaDurationCache: [String: Double] = [:]
+    /// 和訳音声は既定でやや速めに読む(2026-08-21の要望。全体速度にさらに掛かる)
+    private let jaRateBoost = 1.15
     /// ブロック全体を何周するか(現在ブロック)
     private var blockRepeatCount = 1
     /// 何周終えたか(0始まり)
@@ -336,7 +338,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     func setSpeed(_ speed: Double) {
         self.speed = speed
         player?.rate = Float(speed)
-        jaPlayer?.rate = Float(speed)
+        jaPlayer?.rate = Float(speed * jaRateBoost)
     }
 
     /// 再生位置を前後に動かす(±5秒スキップ用)。タイムライン全体を移動できるので、
@@ -607,10 +609,10 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         segJaDurations = (0..<segCounts.count).map { i in
             guard let ja = jaText(forSegment: i), !ja.isEmpty else { return 0 }
             if let url = JaAudioStore.url(forBlockText: item.english, segmentIndex: i) {
-                if let cached = Self.jaDurationCache[url.path] { return cached }
+                if let cached = Self.jaDurationCache[url.path] { return cached / jaRateBoost }
                 let d = (try? AVAudioPlayer(contentsOf: url))?.duration ?? 0
                 Self.jaDurationCache[url.path] = d
-                return d
+                return d / jaRateBoost
             }
             // TTSフォールバック分は文字数からおおよその長さを見積もる
             return Double(ja.count) * 0.135 + 0.3
@@ -700,12 +702,13 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
            let filePlayer = try? AVAudioPlayer(contentsOf: url) {
             filePlayer.delegate = self
             filePlayer.enableRate = true
-            filePlayer.rate = Float(speed)
+            filePlayer.rate = Float(speed * jaRateBoost)
             jaPlayer = filePlayer
             filePlayer.play()
         } else {
             let utterance = AVSpeechUtterance(string: ja)
             utterance.voice = japaneseVoice
+            utterance.rate = AVSpeechUtteranceDefaultSpeechRate * Float(jaRateBoost)
             jaSynthesizer.speak(utterance)
         }
     }
