@@ -303,6 +303,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     func start(items: [AudioPlaybackItem], startAt: Int, speed: Double, source: Source = .reading) {
         stop()
         SpeechSynthesisService.shared.stop()  // TTSと同時再生しない
+        StudyWordPlayer.active?.stopAll()     // 単語学習の音声とも二重再生しない
         guard !items.isEmpty else { return }
         self.source = source
         self.items = items

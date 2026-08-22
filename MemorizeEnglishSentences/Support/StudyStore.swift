@@ -2,6 +2,10 @@ import Foundation
 
 /// 「歩きながら英文をチェック → あとで単語を選ぶ → 単語リストを再生(シス単風)」用のデータ。
 /// Documents/study.json に保存する。学習データ(SwiftData)とは独立。
+///
+/// 大事に貯めたチェック/単語が消えないよう、保存のたびに study.json.bak も書き、
+/// 読み込みに失敗したら .bak から復旧する。さらに壊れたファイルは study.json.corrupt に
+/// 退避してから上書きするので、いきなり空で潰してしまうことがない。
 final class StudyStore: ObservableObject {
     static let shared = StudyStore()
 
@@ -11,6 +15,19 @@ final class StudyStore: ObservableObject {
         var en: String
         var ja: String
         var addedAt = Date()
+
+        // 将来フィールドが増えても古い study.json を壊さないよう、
+        // 足りないキーは既定値で補って読む(欠損キーでデコード失敗→全消し を防ぐ)
+        init(id: UUID = UUID(), en: String, ja: String, addedAt: Date = Date()) {
+            self.id = id; self.en = en; self.ja = ja; self.addedAt = addedAt
+        }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
+            en = (try? c.decode(String.self, forKey: .en)) ?? ""
+            ja = (try? c.decode(String.self, forKey: .ja)) ?? ""
+            addedAt = (try? c.decode(Date.self, forKey: .addedAt)) ?? Date()
+        }
     }
     /// 覚える単語(チェックした英文から選んだ、意味と結びついていない単語)
     struct StudyWord: Identifiable, Codable, Equatable {
@@ -18,6 +35,17 @@ final class StudyStore: ObservableObject {
         var word: String
         var meaning: String
         var addedAt = Date()
+
+        init(id: UUID = UUID(), word: String, meaning: String, addedAt: Date = Date()) {
+            self.id = id; self.word = word; self.meaning = meaning; self.addedAt = addedAt
+        }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
+            word = (try? c.decode(String.self, forKey: .word)) ?? ""
+            meaning = (try? c.decode(String.self, forKey: .meaning)) ?? ""
+            addedAt = (try? c.decode(Date.self, forKey: .addedAt)) ?? Date()
+        }
     }
 
     @Published private(set) var flagged: [FlaggedSentence] = []
@@ -27,6 +55,8 @@ final class StudyStore: ObservableObject {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("study.json")
     }
+    private var backupURL: URL { fileURL.appendingPathExtension("bak") }
+    private var corruptURL: URL { fileURL.appendingPathExtension("corrupt") }
 
     private struct Payload: Codable {
         var flagged: [FlaggedSentence]
@@ -83,17 +113,45 @@ final class StudyStore: ObservableObject {
         save()
     }
 
-    // MARK: - 永続化
+    // MARK: - 永続化(消えない工夫つき)
+
+    private func decodePayload(_ url: URL) -> Payload? {
+        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
+        return try? JSONDecoder().decode(Payload.self, from: data)
+    }
 
     private func load() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let p = try? JSONDecoder().decode(Payload.self, from: data) else { return }
-        flagged = p.flagged
-        words = p.words
+        // ① 本体を読む
+        if let p = decodePayload(fileURL) {
+            flagged = p.flagged
+            words = p.words
+            return
+        }
+        // ② 本体が読めない。バックアップから復旧を試みる
+        if let p = decodePayload(backupURL) {
+            flagged = p.flagged
+            words = p.words
+            // 壊れた本体は退避してから、良品のバックアップで本体を作り直す
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try? FileManager.default.removeItem(at: corruptURL)
+                try? FileManager.default.moveItem(at: fileURL, to: corruptURL)
+            }
+            save()
+            return
+        }
+        // ③ どちらも読めない。本体があるなら壊れている可能性があるので、
+        //    空で上書きして消してしまわないよう corrupt へ退避だけしておく
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            try? FileManager.default.removeItem(at: corruptURL)
+            try? FileManager.default.copyItem(at: fileURL, to: corruptURL)
+        }
+        // 初回起動などでファイルが無いだけなら、空のままで問題ない
     }
 
     private func save() {
         guard let data = try? JSONEncoder().encode(Payload(flagged: flagged, words: words)) else { return }
+        // 本体を書いてから、同じ中身をバックアップにも書く(次回の復旧用)
         try? data.write(to: fileURL, options: .atomic)
+        try? data.write(to: backupURL, options: .atomic)
     }
 }

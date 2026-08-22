@@ -12,6 +12,8 @@ final class GoogleTTS: NSObject {
     static let shared = GoogleTTS()
 
     private var player: AVAudioPlayer?
+    /// 再生が終わったときに一度だけ呼ぶ(シス単風の 英→和→英 の連鎖に使う)
+    private var onFinished: (() -> Void)?
     /// 取得済みmp3のキャッシュ(同じ単語を何度も取りに行かない。過去に聴いた語はオフラインでも鳴る)
     private var cache: [String: Data] = [:]
     /// ネット接続の見張り(オフラインを即判定して待ち時間をなくす)
@@ -48,10 +50,12 @@ final class GoogleTTS: NSObject {
     ]
 
     /// 発音する。posJa(名詞/動詞など)が分かればヘテロニムを品詞に合わせて発音する。
-    /// 失敗時は onFallback を呼ぶ(内蔵TTS用)
-    func speak(_ text: String, posJa: String? = nil, onFallback: @escaping () -> Void) {
+    /// 失敗時は onFallback を呼ぶ(内蔵TTS用)。onFinished は再生が終わったら一度だけ呼ぶ
+    /// (シス単風の 英→和→英 の連鎖に使う。フォールバック時も鳴り終わり相当で呼ぶ)。
+    func speak(_ text: String, posJa: String? = nil,
+               onFallback: @escaping () -> Void, onFinished: (() -> Void)? = nil) {
         var word = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !word.isEmpty else { return }
+        guard !word.isEmpty else { onFinished?(); return }
         // ヘテロニムは品詞に応じてキャリアフレーズに置き換える
         let lower = word.lowercased()
         if Self.heteronyms.contains(lower), let pos = posJa {
@@ -61,24 +65,26 @@ final class GoogleTTS: NSObject {
 
         // 取得済み(メモリ)ならそのまま鳴らす
         if let data = cache[word] {
-            play(data, fallbackText: word, onFallback: onFallback)
+            play(data, fallbackText: word, onFallback: onFallback, onFinished: onFinished)
             return
         }
         // 事前ダウンロード済み(ディスク)ならオフラインでもGoogle音声で鳴らす
         let disk = diskURL(for: word)
         if let data = try? Data(contentsOf: disk), data.count > 200 {
             cache[word] = data
-            play(data, fallbackText: word, onFallback: onFallback)
+            play(data, fallbackText: word, onFallback: onFallback, onFinished: onFinished)
             return
         }
         // オフラインでディスクにも無ければ、待たずに即・内蔵音声
         if !isOnline {
             onFallback()
+            finishAfterFallback(word, onFinished)
             return
         }
         guard let encoded = word.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q=\(encoded)") else {
             onFallback()
+            finishAfterFallback(word, onFinished)
             return
         }
         var request = URLRequest(url: url, timeoutInterval: 6)
@@ -88,15 +94,32 @@ final class GoogleTTS: NSObject {
         URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
             let ok = (response as? HTTPURLResponse)?.statusCode == 200
             guard let self, ok, let data, data.count > 200 else {
-                DispatchQueue.main.async { onFallback() }
+                DispatchQueue.main.async { onFallback(); self?.finishAfterFallback(word, onFinished) }
                 return
             }
             self.cache[word] = data
-            DispatchQueue.main.async { self.play(data, fallbackText: word, onFallback: onFallback) }
+            DispatchQueue.main.async { self.play(data, fallbackText: word, onFallback: onFallback, onFinished: onFinished) }
         }.resume()
     }
 
-    private func play(_ data: Data, fallbackText: String, onFallback: @escaping () -> Void) {
+    /// 今鳴っている発音を止める(シス単風プレイヤーの一時停止・曲送り用)。
+    /// 予約していた完了通知も破棄して、古い連鎖が動かないようにする。
+    func stop() {
+        onFinished = nil
+        player?.stop()
+        player = nil
+    }
+
+    /// 内蔵音声にフォールバックしたときの、鳴り終わり相当の見積り時間で onFinished を呼ぶ
+    private func finishAfterFallback(_ word: String, _ onFinished: (() -> Void)?) {
+        guard let onFinished else { return }
+        // 語長からおおよその読み上げ時間を見積る(短くても最低0.6秒)
+        let secs = max(0.6, Double(word.count) * 0.09 + 0.35)
+        DispatchQueue.main.asyncAfter(deadline: .now() + secs) { onFinished() }
+    }
+
+    private func play(_ data: Data, fallbackText: String,
+                      onFallback: @escaping () -> Void, onFinished: (() -> Void)? = nil) {
         do {
             // 再生専用にセッションを整える(録音中は触らない)
             if !SpeechRecognitionService.isAnyRecording {
@@ -104,10 +127,21 @@ final class GoogleTTS: NSObject {
                 try? AVAudioSession.sharedInstance().setActive(true)
             }
             let p = try AVAudioPlayer(data: data)
+            self.onFinished = onFinished
+            p.delegate = self
             player = p
             p.play()
         } catch {
             onFallback()
+            finishAfterFallback(fallbackText, onFinished)
         }
+    }
+}
+
+extension GoogleTTS: AVAudioPlayerDelegate {
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        let cb = onFinished
+        onFinished = nil
+        cb?()
     }
 }
