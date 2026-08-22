@@ -8,7 +8,11 @@ struct AudioPlayerView: View {
     @ObservedObject private var audio = AudioSequencePlayer.shared
     /// 各文の「あとで単語チェックする文」フラグ(しおり)の状態を監視する
     @ObservedObject private var study = StudyStore.shared
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+
+    /// チェック英文の復習再生か(単語学習からの再生)。表示や操作を絞る
+    private var isStudyMode: Bool { audio.source == .study }
     /// 読み上げ速度倍率(1.0=標準)。TTS版と共有・記憶
     @AppStorage("listenSpeed") private var listenSpeed = 1.0
     /// 各英文の後にその文の和訳をTTSで読むか(全項目共通・記憶)
@@ -74,19 +78,22 @@ struct AudioPlayerView: View {
                     }
                 })
                 // ブロック全体(文ごとの一式)を何回再生するか(全項目共通)。
-                // ×3は使わないため廃止し、タップで ×1↔×2 を切り替える
-                Button {
-                    setBlockCount(blockCount == 1 ? 2 : 1)
-                } label: {
-                    Text("×\(blockCount)")
-                        .font(.footnote.weight(.semibold).monospacedDigit())
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Capsule().fill(blockCount > 1 ? Color.accentColor
-                                                                  : Color(.secondarySystemBackground)))
-                        .foregroundStyle(blockCount > 1 ? Color.white : Color.primary)
+                // ×3は使わないため廃止し、タップで ×1↔×2 を切り替える。
+                // チェック英文の復習(単語学習)では回数指定は不要なので出さない
+                if !isStudyMode {
+                    Button {
+                        setBlockCount(blockCount == 1 ? 2 : 1)
+                    } label: {
+                        Text("×\(blockCount)")
+                            .font(.footnote.weight(.semibold).monospacedDigit())
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Capsule().fill(blockCount > 1 ? Color.accentColor
+                                                                      : Color(.secondarySystemBackground)))
+                            .foregroundStyle(blockCount > 1 ? Color.white : Color.primary)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
                 Button {
                     audio.stop()
                     dismiss()
@@ -229,8 +236,13 @@ struct AudioPlayerView: View {
         ScrollViewReader { proxy in
         ScrollView {
             if let item, let segments = item.segments {
+                // 復習(単語学習)では、しおりを付けた文(回数>0)だけを出す。前後の文は出さない
+                let shown = Array(segments.enumerated()).filter { pair in
+                    !isStudyMode || (item.repeatCounts.indices.contains(pair.offset)
+                                     && item.repeatCounts[pair.offset] > 0)
+                }
                 VStack(alignment: .leading, spacing: 18) {
-                    ForEach(Array(segments.enumerated()), id: \.offset) { i, seg in
+                    ForEach(shown, id: \.offset) { i, seg in
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             VStack(alignment: .leading, spacing: 6) {
                                 // 英文と和訳の表示順(長押しで入れ替え。和訳→英文は和文英訳の練習用)。
@@ -244,12 +256,17 @@ struct AudioPlayerView: View {
                                         .multilineTextAlignment(.leading)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                // 英文は常に全幅で表示する(報告の丸は右側の×Nの上下に置く)
-                                AudioSegmentHighlightView(text: seg.en, segmentRange: seg.range,
-                                                          highlight: isCurrent ? audio.highlight : Self.idleHighlight)
-                                    .font(.title3.weight(.medium))
-                                    .multilineTextAlignment(.leading)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                // 英文は常に全幅で表示する(報告の丸は右側の×Nの上下に置く)。
+                                // 復習(単語学習)では、単語をタップして「覚える単語」に登録できる
+                                if isStudyMode {
+                                    studyTappableSentence(seg.en, blockEn: item.english)
+                                } else {
+                                    AudioSegmentHighlightView(text: seg.en, segmentRange: seg.range,
+                                                              highlight: isCurrent ? audio.highlight : Self.idleHighlight)
+                                        .font(.title3.weight(.medium))
+                                        .multilineTextAlignment(.leading)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
                                 if jaAfterSentence, !jaFirst, !seg.ja.isEmpty {
                                     Text(seg.ja)
                                         .font(.subheadline)
@@ -272,8 +289,8 @@ struct AudioPlayerView: View {
                                     jaFirst.toggle()
                                 }
                             }
-                            // ×0は薄く表示(スキップされる文)
-                            .opacity(countFor(i) == 0 ? 0.35 : 1)
+                            // ×0は薄く表示(スキップされる文)。復習では対象文だけなので常に濃く
+                            .opacity(isStudyMode ? 1 : (countFor(i) == 0 ? 0.35 : 1))
                             .id(i)
 
                             // 右側の操作列。しおりは全ての文に付けられる(今流れている文以外=
@@ -398,6 +415,47 @@ struct AudioPlayerView: View {
         blockCount = n
         SentenceRepeatStore.globalBlockCount = n
         audio.updateGlobalBlockRepeat(n)
+    }
+
+    /// 復習(単語学習)用の、単語をタップして「覚える単語」に出し入れできる英文表示。
+    /// 選択済みの単語はアクセント色のカプセルで示す(単語学習ハブと同じ操作感)。
+    @ViewBuilder
+    private func studyTappableSentence(_ text: String, blockEn: String) -> some View {
+        let tokens = WordTokenizer.tokenize(text)
+        FlowLayout(spacing: 4, lineSpacing: 6) {
+            ForEach(tokens) { token in
+                let word = token.normalized.isEmpty ? token.display : token.normalized
+                let picked = study.hasWord(word)
+                Text(token.display)
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(picked ? Color.white : Color.primary)
+                    .padding(.horizontal, picked ? 5 : 0)
+                    .padding(.vertical, picked ? 2 : 0)
+                    .background(picked ? Capsule().fill(Color.accentColor) : nil)
+                    .onTapGesture { toggleStudyWord(word: word, token: token, tokens: tokens, blockEn: blockEn) }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 単語を「覚える単語」に出し入れする(意味は出典ブロックの文脈で引く。無ければ内蔵辞書)
+    private func toggleStudyWord(word: String, token: WordToken, tokens: [WordToken], blockEn: String) {
+        if study.hasWord(word) {
+            study.toggleWord(word, meaning: "")  // 既にある→外す
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            return
+        }
+        let occ = WordTokenizer.occurrence(of: token, in: tokens)
+        var meaning = ""
+        if !blockEn.isEmpty,
+           let sense = WordSenseLookup.cached(word: word, occurrence: occ,
+                                              blockText: blockEn, modelContext: modelContext) {
+            meaning = sense.meaningJa
+        } else if let entry = BasicWordDictionary.lookup(word) {
+            meaning = entry
+        }
+        study.toggleWord(word, meaning: meaning)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     /// 報告のワンタップボタン(英/日のラベル入り)。押すと赤くなり、もう一度押すと取り消せる。
