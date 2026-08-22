@@ -94,6 +94,15 @@ final class StudyStore: ObservableObject {
         save()
     }
 
+    /// 出典ブロック全文を後から埋める(古いチェック文の教材音声・意味引きを効かせるため)
+    func setBlockEn(_ id: UUID, blockEn: String) {
+        let b = blockEn.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !b.isEmpty, let i = flagged.firstIndex(where: { $0.id == id }),
+              flagged[i].blockEn != b else { return }
+        flagged[i].blockEn = b
+        save()
+    }
+
     // MARK: - 覚える単語
 
     func hasWord(_ word: String) -> Bool {

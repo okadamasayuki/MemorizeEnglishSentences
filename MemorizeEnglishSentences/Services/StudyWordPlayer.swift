@@ -8,11 +8,13 @@ import Combine
 /// View(構造体)だと再生完了のデリゲートを受けられず連鎖が途切れるため、
 /// 参照型のエンジンに切り出している。曲送り/一時停止は token で古い連鎖を無効化する。
 final class StudyWordPlayer: NSObject, ObservableObject {
-    /// いま開いている単語プレイヤー。音読側が再生を始めるとき、これを止めて二重再生を防ぐ
-    static weak var active: StudyWordPlayer?
+    /// 画面を閉じても再生を続けられるよう共有インスタンスにする(ミニプレイヤー対応)
+    static let shared = StudyWordPlayer()
 
     @Published var index = 0
     @Published var isPlaying = false
+    /// 再生セッションが生きているか(一時停止中も true)。ミニプレイヤーの表示判定に使う
+    @Published var sessionActive = false
 
     private(set) var words: [StudyStore.StudyWord] = []
     /// 英語②(2回目)を読み終えてから次の語へ進むまでの間(秒)。速度切り替えで変える。
@@ -47,12 +49,16 @@ final class StudyWordPlayer: NSObject, ObservableObject {
     func play() {
         guard !words.isEmpty else { return }
         // 音読タブの音声と二重に鳴らさない(片方が鳴ったらもう片方は止める)
-        Self.active = self
         AudioSequencePlayer.shared.stop()
         SpeechSynthesisService.shared.stop()
+        sessionActive = true
         isPlaying = true
         speakCurrent()
     }
+
+    /// いま読んでいる単語(ミニプレイヤーの表示用)
+    var currentWord: String { words.indices.contains(index) ? words[index].word : "" }
+    var currentMeaning: String { words.indices.contains(index) ? words[index].meaning : "" }
 
     func pause() {
         isPlaying = false
@@ -63,9 +69,9 @@ final class StudyWordPlayer: NSObject, ObservableObject {
 
     /// 指定の語へ移動して読み直す(タップ・前へ・次へ)
     func jump(to i: Int) {
-        Self.active = self
         AudioSequencePlayer.shared.stop()
         SpeechSynthesisService.shared.stop()
+        sessionActive = true
         cancelChain()
         index = min(max(0, i), max(0, words.count - 1))
         speakCurrent()
@@ -76,8 +82,8 @@ final class StudyWordPlayer: NSObject, ObservableObject {
 
     func stopAll() {
         isPlaying = false
+        sessionActive = false
         cancelChain()
-        if Self.active === self { Self.active = nil }
     }
 
     // MARK: - 連鎖(英→和→英→次へ)

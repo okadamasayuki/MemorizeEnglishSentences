@@ -6,7 +6,10 @@ import SwiftUI
 ///   (このタブでは教材音声で英文を順番に読み上げて、どこが分からなかったか復習できる)
 /// ②選んだ単語リストを確認して、シス単風プレイヤーで再生する
 struct StudyHubView: View {
-    @Environment(\.modelContext) private var context
+    /// 呼び出し元(音読タブ)の modelContext を明示的に受け取る。
+    /// sheet の @Environment(\.modelContext) が空だと passage 検索・意味引きが失敗し、
+    /// 教材音声が使えず読み上げに落ちてしまうため、確実に効く context を渡す。
+    let context: ModelContext
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = StudyStore.shared
     private var speech: SpeechSynthesisService { .shared }
@@ -57,7 +60,9 @@ struct StudyHubView: View {
             }
             // 他のボタンと合わせて青(アクセント)で表示する
             .tint(Color.accentColor)
-            .fullScreenCover(isPresented: $showWordPlayer) {
+            // 再生中に下スワイプで下げると、ミニプレイヤーに残す(音読と同じ操作感)
+            .miniPlayerHost()
+            .sheet(isPresented: $showWordPlayer) {
                 StudyWordPlayerView(words: store.words)
             }
             // 教材音声のプレイヤー(音読タブと同じ画面)。下スワイプで閉じると
@@ -68,7 +73,10 @@ struct StudyHubView: View {
             .fullScreenCover(isPresented: $showSentencePlayer) {
                 SentencePlayerView(items: sentenceItems)
             }
-            .onAppear { backfillMeanings() }
+            .onAppear {
+                backfillBlockRefs()
+                backfillMeanings()
+            }
         }
     }
 
@@ -163,7 +171,7 @@ struct StudyHubView: View {
         }
 
         AudioSequencePlayer.shared.stop()
-        StudyWordPlayer.active?.stopAll()
+        StudyWordPlayer.shared.stopAll()
 
         if items.isEmpty {
             // 教材音声が見つからない → 従来の読み上げ(合成音声)にフォールバック
@@ -177,12 +185,41 @@ struct StudyHubView: View {
         showAudioPlayer = true
     }
 
-    /// 覚える単語に日本語訳が入っていないものがあれば、内蔵辞書で補う(再生時に意味も読まれるように)
-    private func backfillMeanings() {
-        for w in store.words where w.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            if let entry = BasicWordDictionary.lookup(w.word) {
-                store.setMeaning(w.id, meaning: entry)
+    /// 古いチェック文(出典ブロック未記録)に、本文検索でブロック全文を紐づける。
+    /// これで教材音声の再生も、文脈に合った意味引きも効くようになる。
+    private func backfillBlockRefs() {
+        let needs = store.flagged.filter { $0.blockEn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !needs.isEmpty else { return }
+        let allPassages = (try? context.fetch(FetchDescriptor<Passage>())) ?? []
+        guard !allPassages.isEmpty else { return }
+        for s in needs {
+            let sent = s.en.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let block = allPassages.first(where: { $0.englishFullText.contains(sent) })?.englishFullText {
+                store.setBlockEn(s.id, blockEn: block)
             }
+        }
+    }
+
+    /// 覚える単語に日本語訳が入っていないものを補う。
+    /// まずその単語を含むチェック文の出典ブロックで文脈に合った意味を引き、無ければ内蔵辞書。
+    private func backfillMeanings() {
+        let empties = store.words.filter { $0.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !empties.isEmpty else { return }
+        for w in empties {
+            var meaning = ""
+            // この単語を含むチェック文を探し、その出典ブロックを文脈にして意味を引く
+            if let s = store.flagged.first(where: {
+                WordTokenizer.tokenize($0.en).contains { tok in
+                    (tok.normalized.isEmpty ? tok.display : tok.normalized).lowercased() == w.word.lowercased()
+                }
+            }) {
+                let block = s.blockEn.isEmpty ? s.en : s.blockEn
+                if let sense = WordSenseLookup.cached(word: w.word, blockText: block, modelContext: context) {
+                    meaning = sense.meaningJa
+                }
+            }
+            if meaning.isEmpty, let entry = BasicWordDictionary.lookup(w.word) { meaning = entry }
+            if !meaning.isEmpty { store.setMeaning(w.id, meaning: meaning) }
         }
     }
 }

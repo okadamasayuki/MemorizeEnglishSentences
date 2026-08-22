@@ -294,7 +294,7 @@ struct PassageListView: View {
                 AudioPlayerView()
             }
             .sheet(isPresented: $showStudyHub) {
-                StudyHubView()
+                StudyHubView(context: context)
             }
             .sheet(item: $selectedWord) { selected in
                 WordPopupView(word: selected.word, meaning: wordMeaning)

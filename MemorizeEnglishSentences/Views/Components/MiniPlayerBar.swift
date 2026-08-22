@@ -4,8 +4,12 @@ import SwiftUI
 /// 各タブの下部に「教材音声の再生中だけ」ミニプレイヤーを挿し込む。
 /// (タブバー上のアクセサリ枠は空でも白い枠が出てしまうため、タブの中に置く方式)
 struct MiniPlayerHost: ViewModifier {
-    @State private var active = false
+    @State private var audioActive = false
+    @State private var wordActive = false
     @State private var showFullPlayer = false
+    @State private var showWordPlayer = false
+
+    private var active: Bool { audioActive || wordActive }
 
     func body(content: Content) -> some View {
         content
@@ -13,7 +17,11 @@ struct MiniPlayerHost: ViewModifier {
                 if active {
                     // タブを行き来した時に下からせり上がって見えないよう、
                     // 出現・消滅はアニメーションなしの即時表示にする
-                    MiniPlayerBar { showFullPlayer = true }
+                    MiniPlayerBar {
+                        // 単語学習が鳴っていればそのプレイヤー、そうでなければ音読プレイヤーを開く
+                        if StudyWordPlayer.shared.sessionActive { showWordPlayer = true }
+                        else { showFullPlayer = true }
+                    }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
@@ -27,8 +35,14 @@ struct MiniPlayerHost: ViewModifier {
             .sheet(isPresented: $showFullPlayer) {
                 AudioPlayerView()
             }
+            .sheet(isPresented: $showWordPlayer) {
+                StudyWordPlayerView(words: StudyWordPlayer.shared.words)
+            }
             .onReceive(AudioSequencePlayer.shared.$isPlayingSequence) { playing in
-                if active != playing { active = playing }
+                if audioActive != playing { audioActive = playing }
+            }
+            .onReceive(StudyWordPlayer.shared.$sessionActive) { on in
+                if wordActive != on { wordActive = on }
             }
     }
 }
@@ -43,13 +57,16 @@ extension View {
 /// タップでいつもの全画面プレイヤーに戻る。
 struct MiniPlayerBar: View {
     @ObservedObject private var audio = AudioSequencePlayer.shared
+    @ObservedObject private var word = StudyWordPlayer.shared
     /// タップで全画面プレイヤーを開く
     let onOpen: () -> Void
 
+    /// 単語学習(シス単風)が鳴っているか。そちらを優先して表示・操作する
+    private var wordMode: Bool { word.sessionActive }
+
     var body: some View {
         HStack(spacing: 10) {
-            // 今読んでいる文(英語を読んでいる時は英文、和訳を読んでいる時は和訳)。
-            // 番号(N/240)や×は置かず、文の表示にスペースを使い切る。
+            // 今読んでいるもの(音読=文、単語学習=単語と意味)。
             // 縦幅は4行分に固定し、短い文は縦中央に置く
             Text(displayText)
                 .font(.footnote)
@@ -63,7 +80,7 @@ struct MiniPlayerBar: View {
             Button {
                 togglePause()
             } label: {
-                Image(systemName: audio.isPaused ? "play.fill" : "pause.fill")
+                Image(systemName: isPaused ? "play.fill" : "pause.fill")
                     .font(.body)
                     .foregroundStyle(Color.accentColor)
                     .frame(width: 32, height: 32)
@@ -79,19 +96,34 @@ struct MiniPlayerBar: View {
                 .onEnded { value in
                     let horizontal = abs(value.translation.width) > 40
                     let downward = value.translation.height > 40
-                    if horizontal || downward {
-                        audio.stop()
-                    }
+                    if horizontal || downward { stopActive() }
                 }
         )
     }
 
-    private func togglePause() {
-        if audio.isPaused { audio.resume() } else { audio.pause() }
+    private var isPaused: Bool {
+        wordMode ? !word.isPlaying : audio.isPaused
     }
 
-    /// 表示する文: 和訳の読み上げ中は和訳、それ以外は英文
+    private func togglePause() {
+        if wordMode {
+            if word.isPlaying { word.pause() } else { word.play() }
+        } else {
+            if audio.isPaused { audio.resume() } else { audio.pause() }
+        }
+    }
+
+    private func stopActive() {
+        if wordMode { word.stopAll() } else { audio.stop() }
+    }
+
+    /// 表示する内容: 単語学習は「単語 — 意味」、音読は今読んでいる文(和訳中は和訳)
     private var displayText: String {
+        if wordMode {
+            let w = word.currentWord
+            let m = word.currentMeaning
+            return m.isEmpty ? w : "\(w) — \(m)"
+        }
         if audio.speakingJaSegment != nil, let ja = audio.currentSentenceJa, !ja.isEmpty {
             return ja
         }

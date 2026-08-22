@@ -7,7 +7,7 @@ struct StudyWordPlayerView: View {
     let words: [StudyStore.StudyWord]
     @Environment(\.dismiss) private var dismiss
 
-    @StateObject private var player = StudyWordPlayer()
+    @ObservedObject private var player = StudyWordPlayer.shared
     /// 1語を読み終えてから次へ進むまでの間(秒)。速い/普通/ゆっくり。アプリを閉じても記憶。
     /// 「普通」は本家シス単の実測(単語間 約1.2秒)に合わせている
     @AppStorage("studyWordGap") private var gap = 1.2
@@ -91,11 +91,16 @@ struct StudyWordPlayerView: View {
             .padding(.bottom, 20)
         }
         .onAppear {
-            player.configure(words: words)
             player.gap = gap
-            if !words.isEmpty { player.play() }
+            // ミニプレイヤーから開き直した時(再生継続中)は続きから。
+            // 初めて開いた時だけ、単語をセットして最初から再生する
+            if !player.sessionActive {
+                player.configure(words: words)
+                if !words.isEmpty { player.play() }
+            }
         }
-        .onDisappear { player.stopAll() }
+        // 画面を閉じても再生は止めない(下スワイプでミニプレイヤーに残す)。
+        // 完全に止めるのは×ボタンかミニプレイヤーのスワイプで
     }
 
     @ViewBuilder
