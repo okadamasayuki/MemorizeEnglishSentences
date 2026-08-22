@@ -33,6 +33,8 @@ struct PassageListView: View {
     @State private var restoreDone = false
     /// アプリの利用期限のお知らせを表示中か
     @State private var showExpiryInfo = false
+    /// 単語学習ハブを表示中か
+    @State private var showStudyHub = false
     /// 連続再生の状態。@ObservedObject にすると再生中の状態更新のたびに
     /// 一覧全体が再描画されて重くなるため、必要な変化だけ onReceive で拾う
     private var speech: SpeechSynthesisService { .shared }
@@ -229,6 +231,14 @@ struct PassageListView: View {
                             .foregroundStyle(expiryTintColor)
                     }
                 }
+                // 単語学習(チェックした英文→単語を選ぶ→シス単風に再生)
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showStudyHub = true
+                    } label: {
+                        Image(systemName: "checklist")
+                    }
+                }
                 if !blocks.isEmpty {
                     // 現在位置(240件中 N件目)
                     ToolbarItem(placement: .principal) {
@@ -282,6 +292,9 @@ struct PassageListView: View {
             // sheetにすることで「下スワイプで閉じる=再生は続けてミニプレイヤーへ」ができる
             .sheet(isPresented: $showAudioPlayer) {
                 AudioPlayerView()
+            }
+            .sheet(isPresented: $showStudyHub) {
+                StudyHubView()
             }
             .sheet(item: $selectedWord) { selected in
                 WordPopupView(word: selected.word, meaning: wordMeaning)
