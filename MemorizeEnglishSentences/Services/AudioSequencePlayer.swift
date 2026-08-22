@@ -119,7 +119,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     let progress = PlaybackProgress()
 
     /// 再生中の音声がどのタブのものか(音読/暗記)。タブ間で誤再生しないための目印
-    enum Source { case reading, recall }
+    enum Source { case reading, recall, study }
     @Published var source: Source?
 
     @Published var isPlayingSequence = false

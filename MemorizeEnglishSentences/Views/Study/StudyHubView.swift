@@ -3,14 +3,16 @@ import SwiftUI
 
 /// 単語学習ハブ。
 /// ①「チェックした英文」を開いて、意味と結びつかない単語をタップで選ぶ
-///   (このタブでは英文を順番に読み上げて、どこが分からなかったか復習できる)
+///   (このタブでは教材音声で英文を順番に読み上げて、どこが分からなかったか復習できる)
 /// ②選んだ単語リストを確認して、シス単風プレイヤーで再生する
 struct StudyHubView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = StudyStore.shared
     private var speech: SpeechSynthesisService { .shared }
+    @AppStorage("listenSpeed") private var listenSpeed = 1.0
     @State private var showWordPlayer = false
+    @State private var showAudioPlayer = false
     @State private var showSentencePlayer = false
     @State private var sentenceItems: [PlaybackItem] = []
     /// 0=チェックした英文(左) / 1=覚える単語(右)。件数が増えても押しづらくならないようタブ分け
@@ -53,12 +55,20 @@ struct StudyHubView: View {
                     }
                 }
             }
+            // 他のボタンと合わせて青(アクセント)で表示する
+            .tint(Color.accentColor)
             .fullScreenCover(isPresented: $showWordPlayer) {
                 StudyWordPlayerView(words: store.words)
+            }
+            // 教材音声のプレイヤー(音読タブと同じ画面)。下スワイプで閉じると
+            // 再生は続いてミニプレイヤーに残る
+            .sheet(isPresented: $showAudioPlayer) {
+                AudioPlayerView()
             }
             .fullScreenCover(isPresented: $showSentencePlayer) {
                 SentencePlayerView(items: sentenceItems)
             }
+            .onAppear { backfillMeanings() }
         }
     }
 
@@ -66,7 +76,7 @@ struct StudyHubView: View {
     private var flaggedTab: some View {
         List {
             if store.flagged.isEmpty {
-                Text("音読プレイヤーで各文のしおりボタンを押すと、その英文がここに入ります。左上の再生ボタンで、チェックした英文を順番に読み上げて復習できます。")
+                Text("音読プレイヤーで各文のしおりボタンを押すと、その英文がここに入ります。左上の再生ボタンで、チェックした英文を教材音声で順番に読み上げて復習できます。")
                     .font(.footnote).foregroundStyle(.secondary)
             } else {
                 ForEach(store.flagged) { s in
@@ -105,15 +115,75 @@ struct StudyHubView: View {
         .listStyle(.plain)
     }
 
-    /// チェックした英文を上から順番に読み上げる(復習用)。他の音声とは二重に鳴らさない
+    /// チェックした英文を、教材の本物音声(音読タブと同じ)で上から順番に読み上げる。
+    /// 出典ブロックのMP3を使い、その文だけを鳴らす(他の文はスキップ)。
+    /// 音声が見つからない文しか無ければ、従来の読み上げ(合成音声)にフォールバックする。
     private func playFlaggedSentences() {
-        let items = store.flagged.map { PlaybackItem(english: $0.en, japanese: $0.ja) }
-        guard !items.isEmpty else { return }
+        let flaggedList = store.flagged
+        guard !flaggedList.isEmpty else { return }
+        let allPassages = (try? context.fetch(FetchDescriptor<Passage>())) ?? []
+
+        // 各チェック文の出典ブロック全文を求める(保存済みblockEn優先、無ければ本文検索)
+        func blockText(for s: StudyStore.FlaggedSentence) -> String? {
+            let saved = s.blockEn.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !saved.isEmpty { return saved }
+            let sent = s.en.trimmingCharacters(in: .whitespacesAndNewlines)
+            return allPassages.first { $0.englishFullText.contains(sent) }?.englishFullText
+        }
+
+        // ブロック全文 → そのブロックでチェックされた文(英文)の集合
+        var byBlock: [String: Set<String>] = [:]
+        for s in flaggedList {
+            guard let bt = blockText(for: s) else { continue }
+            byBlock[bt, default: []].insert(s.en.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        // ブロックは文章の並び順で(該当passageが無いものは後ろへ)
+        let ordered = allPassages.map { $0.englishFullText }.filter { byBlock[$0] != nil }
+        let extras = byBlock.keys.filter { !ordered.contains($0) }
+
+        var items: [AudioPlaybackItem] = []
+        for bt in ordered + extras {
+            guard let ens = byBlock[bt],
+                  BlockAudioStore.hasAudio(forBlockText: bt),
+                  let a = BlockAudioStore.item(forBlockText: bt),
+                  let pairs = SentencePairLookup.cached(blockText: bt, modelContext: context),
+                  let segments = AudioPlaybackItem.buildSegments(
+                      english: bt, pairs: pairs.map { ($0.en, $0.ja) }, words: a.words)
+            else { continue }
+            // チェック済みの文だけ回数1、他の文は0(=スキップ)にして、その文だけ鳴らす
+            let counts = segments.map {
+                ens.contains($0.en.trimmingCharacters(in: .whitespacesAndNewlines)) ? 1 : 0
+            }
+            guard counts.contains(where: { $0 > 0 }) else { continue }
+            let jp = allPassages.first { $0.englishFullText == bt }?.japaneseFullText ?? ""
+            items.append(AudioPlaybackItem(english: bt, japanese: jp, url: a.url, words: a.words,
+                                           segments: segments, repeatCounts: counts,
+                                           silences: a.silences, blockRepeat: 1))
+        }
+
         AudioSequencePlayer.shared.stop()
         StudyWordPlayer.active?.stopAll()
-        sentenceItems = items
-        speech.speakSequence(items.map(\.english), startAt: 0)
-        showSentencePlayer = true
+
+        if items.isEmpty {
+            // 教材音声が見つからない → 従来の読み上げ(合成音声)にフォールバック
+            let tts = flaggedList.map { PlaybackItem(english: $0.en, japanese: $0.ja) }
+            sentenceItems = tts
+            speech.speakSequence(tts.map(\.english), speed: listenSpeed, startAt: 0)
+            showSentencePlayer = true
+            return
+        }
+        AudioSequencePlayer.shared.start(items: items, startAt: 0, speed: listenSpeed, source: .study)
+        showAudioPlayer = true
+    }
+
+    /// 覚える単語に日本語訳が入っていないものがあれば、内蔵辞書で補う(再生時に意味も読まれるように)
+    private func backfillMeanings() {
+        for w in store.words where w.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let entry = BasicWordDictionary.lookup(w.word) {
+                store.setMeaning(w.id, meaning: entry)
+            }
+        }
     }
 }
 
@@ -152,11 +222,15 @@ private struct FlaggedSentenceRow: View {
             store.toggleWord(word, meaning: "")  // 既にある→外す
             return
         }
-        // この文での意味を最優先で引く(無ければ内蔵辞書)
+        // この文での意味を最優先で引く。文脈は出典ブロック全文(あれば)を使うと精度が高い
         let occ = WordTokenizer.occurrence(of: token, in: tokens)
+        let blockText = sentence.blockEn.isEmpty ? sentence.en : sentence.blockEn
         var meaning = ""
         if let sense = WordSenseLookup.cached(word: word, occurrence: occ,
-                                              blockText: sentence.en, modelContext: context) {
+                                              blockText: blockText, modelContext: context) {
+            meaning = sense.meaningJa
+        } else if let sense = WordSenseLookup.cached(word: word, blockText: blockText,
+                                                     modelContext: context) {
             meaning = sense.meaningJa
         } else if let entry = BasicWordDictionary.lookup(word) {
             meaning = entry

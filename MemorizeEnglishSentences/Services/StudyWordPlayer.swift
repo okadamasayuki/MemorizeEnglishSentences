@@ -15,8 +15,15 @@ final class StudyWordPlayer: NSObject, ObservableObject {
     @Published var isPlaying = false
 
     private(set) var words: [StudyStore.StudyWord] = []
-    /// 1語を読み終えてから次の語へ進むまでの間(秒)。速度切り替えで変える
-    var gap: Double = 1.0
+    /// 英語②(2回目)を読み終えてから次の語へ進むまでの間(秒)。速度切り替えで変える。
+    /// 本家シス単の実測(単語間 約1.2秒)を「普通」に採用
+    var gap: Double = 1.2
+
+    // 本家シス単の音声を実測して合わせた、語の中の間(秒)
+    /// 英語① → 日本語の意味 の間
+    private let gapEnToJa = 0.65
+    /// 日本語の意味 → 英語②(もう一度) の間
+    private let gapJaToEn = 0.55
 
     private let jaSynth = AVSpeechSynthesizer()
     /// 進行中の連鎖の世代。曲送り/一時停止のたびに増やして古い連鎖を捨てる
@@ -99,7 +106,7 @@ final class StudyWordPlayer: NSObject, ObservableObject {
         guard my == token else { return }
         let meaning = w.meaning.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !meaning.isEmpty else { step3En(my, w); return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + gapEnToJa) { [weak self] in
             guard let self, my == self.token else { return }
             let u = AVSpeechUtterance(string: meaning)
             u.voice = AVSpeechSynthesisVoice(language: "ja-JP")
@@ -111,7 +118,7 @@ final class StudyWordPlayer: NSObject, ObservableObject {
 
     private func step3En(_ my: Int, _ w: StudyStore.StudyWord) {
         guard my == token else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + gapJaToEn) { [weak self] in
             guard let self, my == self.token else { return }
             // ③ 英語(もう一度) → 鳴り終わったら次の語へ
             GoogleTTS.shared.speak(w.word,

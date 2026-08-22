@@ -14,18 +14,21 @@ final class StudyStore: ObservableObject {
         var id = UUID()
         var en: String
         var ja: String
+        /// この文が入っていたブロック全文(教材音声の特定と、文中の単語の意味引きに使う)
+        var blockEn: String = ""
         var addedAt = Date()
 
         // 将来フィールドが増えても古い study.json を壊さないよう、
         // 足りないキーは既定値で補って読む(欠損キーでデコード失敗→全消し を防ぐ)
-        init(id: UUID = UUID(), en: String, ja: String, addedAt: Date = Date()) {
-            self.id = id; self.en = en; self.ja = ja; self.addedAt = addedAt
+        init(id: UUID = UUID(), en: String, ja: String, blockEn: String = "", addedAt: Date = Date()) {
+            self.id = id; self.en = en; self.ja = ja; self.blockEn = blockEn; self.addedAt = addedAt
         }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
             en = (try? c.decode(String.self, forKey: .en)) ?? ""
             ja = (try? c.decode(String.self, forKey: .ja)) ?? ""
+            blockEn = (try? c.decode(String.self, forKey: .blockEn)) ?? ""
             addedAt = (try? c.decode(Date.self, forKey: .addedAt)) ?? Date()
         }
     }
@@ -72,14 +75,16 @@ final class StudyStore: ObservableObject {
         flagged.contains { $0.en == en }
     }
 
-    /// 英文チェックのオン/オフ(再生中のワンタップ用)
-    func toggleFlag(en: String, ja: String) {
+    /// 英文チェックのオン/オフ(再生中のワンタップ用)。
+    /// blockEn にこの文が入っていたブロック全文を渡すと、あとで教材音声の再生や
+    /// 文脈に合った単語の意味引きに使える。
+    func toggleFlag(en: String, ja: String, blockEn: String = "") {
         let trimmed = en.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if let i = flagged.firstIndex(where: { $0.en == trimmed }) {
             flagged.remove(at: i)
         } else {
-            flagged.insert(FlaggedSentence(en: trimmed, ja: ja), at: 0)
+            flagged.insert(FlaggedSentence(en: trimmed, ja: ja, blockEn: blockEn), at: 0)
         }
         save()
     }
@@ -110,6 +115,14 @@ final class StudyStore: ObservableObject {
 
     func removeWord(_ id: UUID) {
         words.removeAll { $0.id == id }
+        save()
+    }
+
+    /// 単語の意味を後から埋める(和訳が空だったものの補完に使う)
+    func setMeaning(_ id: UUID, meaning: String) {
+        let m = meaning.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !m.isEmpty, let i = words.firstIndex(where: { $0.id == id }) else { return }
+        words[i].meaning = m
         save()
     }
 

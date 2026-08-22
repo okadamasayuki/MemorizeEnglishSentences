@@ -8,11 +8,12 @@ struct StudyWordPlayerView: View {
     @Environment(\.dismiss) private var dismiss
 
     @StateObject private var player = StudyWordPlayer()
-    /// 1語を読み終えてから次へ進むまでの間(秒)。速い/普通/ゆっくり。アプリを閉じても記憶
-    @AppStorage("studyWordGap") private var gap = 1.0
+    /// 1語を読み終えてから次へ進むまでの間(秒)。速い/普通/ゆっくり。アプリを閉じても記憶。
+    /// 「普通」は本家シス単の実測(単語間 約1.2秒)に合わせている
+    @AppStorage("studyWordGap") private var gap = 1.2
 
-    // 英→和→英の3回読むので、間は語間の休みだけを持たせる
-    private let gaps: [(String, Double)] = [("速い", 0.4), ("普通", 1.0), ("ゆっくり", 2.0)]
+    // 英→和→英の3回読むので、ここでは語と語の間だけを持たせる(語の中の間はエンジン側で固定)
+    private let gaps: [(String, Double)] = [("速い", 0.7), ("普通", 1.2), ("ゆっくり", 2.2)]
 
     var body: some View {
         VStack(spacing: 16) {

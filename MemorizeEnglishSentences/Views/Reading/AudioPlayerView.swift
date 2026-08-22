@@ -279,9 +279,11 @@ struct AudioPlayerView: View {
                             // 右側の操作列。しおりは全ての文に付けられる(今流れている文以外=
                             // 1つ前の文などにも付けられる)。区切り/読み方の報告は表示中の文だけに出す。
                             VStack(spacing: 8) {
-                                // しおり=あとで単語をチェックする文として登録(歩きながらワンタップ)
+                                // しおり=あとで単語をチェックする文として登録(歩きながらワンタップ)。
+                                // 出典ブロック全文も一緒に覚えておく(教材音声の再生・意味引きに使う)
                                 Button {
-                                    study.toggleFlag(en: seg.en, ja: seg.ja)
+                                    study.toggleFlag(en: seg.en, ja: seg.ja,
+                                                     blockEn: audio.currentItem?.english ?? "")
                                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                 } label: {
                                     Image(systemName: study.isFlagged(en: seg.en) ? "bookmark.fill" : "bookmark")
