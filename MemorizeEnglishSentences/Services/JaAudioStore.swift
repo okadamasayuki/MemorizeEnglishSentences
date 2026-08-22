@@ -9,12 +9,10 @@ import Foundation
 /// 選択中の声(UserDefaults "jaVoiceVariant"、空=既定)を優先し、
 /// ファイルが無ければ既定セット → TTS の順でフォールバックする。
 enum JaAudioStore {
-    /// 選べる声(表示名, フォルダID)。フォルダIDが空 = 既定の ja_audio
+    /// 選べる声(表示名, フォルダID)。フォルダIDが空 = 既定の ja_audio。
+    /// 比較の結果、雀松朱司(男性)に一本化(他の声は容量削減のため削除・2026-08-22)
     static let voices: [(name: String, id: String)] = [
         ("雀松朱司(男性)", ""),
-        ("No.7 アナウンス(女性)", "no7announce"),
-        ("春日部つむぎ(女性)", "tsumugi"),
-        ("九州そら(女性)", "sora"),
     ]
 
     static var selectedVariant: String {

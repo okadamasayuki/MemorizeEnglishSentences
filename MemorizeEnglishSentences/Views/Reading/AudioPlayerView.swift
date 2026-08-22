@@ -55,19 +55,22 @@ struct AudioPlayerView: View {
                         .foregroundStyle(jaAfterSentence ? Color.white : Color.primary)
                 }
                 .buttonStyle(.plain)
-                .contextMenu {
-                    ForEach(JaAudioStore.voices, id: \.id) { voice in
-                        Button {
-                            JaAudioStore.selectedVariant = voice.id
-                        } label: {
-                            if JaAudioStore.selectedVariant == voice.id {
-                                Label(voice.name, systemImage: "checkmark")
-                            } else {
-                                Text(voice.name)
+                // 声が複数あるときだけ切り替えメニューを出す(今は雀松朱司の一声のみ)
+                .contextMenu(menuItems: {
+                    if JaAudioStore.voices.count > 1 {
+                        ForEach(JaAudioStore.voices, id: \.id) { voice in
+                            Button {
+                                JaAudioStore.selectedVariant = voice.id
+                            } label: {
+                                if JaAudioStore.selectedVariant == voice.id {
+                                    Label(voice.name, systemImage: "checkmark")
+                                } else {
+                                    Text(voice.name)
+                                }
                             }
                         }
                     }
-                }
+                })
                 // ブロック全体(文ごとの一式)を何回再生するか(全項目共通)。
                 // ×3は使わないため廃止し、タップで ×1↔×2 を切り替える
                 Button {
@@ -275,22 +278,9 @@ struct AudioPlayerView: View {
                             // この文の再生回数(記憶される)。×3は廃止し、タップで ×1↔×2。
                             // 表示中のページだけに出す(スワイプ途中の隣ページには出さない)
                             if isCurrent {
+                                // 文ごとの×N(繰り返し)ボタンは使われないため廃止(2026-08-22)。
+                                // 区切り・読み方の報告ボタンだけ残す
                                 VStack(spacing: 8) {
-                                    Button {
-                                        setCount(i, countFor(i) == 1 ? 2 : 1)
-                                    } label: {
-                                        Text("×\(countFor(i))")
-                                            .font(.footnote.weight(.semibold).monospacedDigit())
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 5)
-                                            .background(
-                                                Capsule().fill(countFor(i) > 1 ? Color.accentColor
-                                                                               : Color(.secondarySystemBackground))
-                                            )
-                                            .foregroundStyle(countFor(i) > 1 ? Color.white
-                                                             : (countFor(i) == 0 ? Color.secondary : Color.primary))
-                                    }
-                                    .buttonStyle(.plain)
                                     // 頭=文頭が変(押すと赤くなり改善タブへ自動追加)
                                     reportLabeledDot("頭", reported: reportedHeads.contains(i)) {
                                         reportedHeads.insert(i)
@@ -301,8 +291,8 @@ struct AudioPlayerView: View {
                                         reportedTails.insert(i)
                                         reportSegmentIssue(seg: seg, index: i, part: "文末")
                                     }
-                                    // 読=和訳の読み方がおかしい
-                                    reportLabeledDot("読", reported: reportedJas.contains(i)) {
+                                    // 日=和訳の読み方(日本語)がおかしい
+                                    reportLabeledDot("日", reported: reportedJas.contains(i)) {
                                         reportedJas.insert(i)
                                         reportJaReadingIssue(seg: seg, index: i)
                                     }

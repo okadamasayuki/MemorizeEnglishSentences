@@ -35,6 +35,8 @@ struct RootTabView: View {
             SampleData.removeLookupHistoryIfNeeded(context: context)
             // 文ごと・全体の再生回数を一度だけ既定(×1)へ戻す(×3廃止に伴う掃除)
             SentenceRepeatStore.resetAllToOneIfNeeded()
+            // 和訳音声を一声に絞ったので、他の声のファイルを一度だけ削除する
+            SampleData.removeUnusedVoiceVariantsIfNeeded()
             // Mac(Claude Code)からの取り込み(ファイルが無ければ即 return で軽い)
             MacBridge.applyCorrectionsIfAny(context: context)
             MacBridge.importPassagesIfAny(context: context)

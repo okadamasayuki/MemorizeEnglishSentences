@@ -20,6 +20,8 @@ struct RecallListView: View {
     private var speech: SpeechSynthesisService { .shared }
     /// 連続再生中か(ツールバーの表示切り替え用)
     @State private var isPlayingSequence = false
+    /// いま鳴っているのが暗記タブの音声か(音読の音声とは区別する)
+    @State private var recallActive = false
     /// 連続再生プレイヤーの表示
     @State private var showPlayer = false
     /// 事前生成音声プレイヤーの表示
@@ -162,18 +164,20 @@ struct RecallListView: View {
             .toolbar {
                 // 表示中の英文を連続再生 / 停止(アメリカ英語で1文ずつ滑らかに)
                 ToolbarItem(placement: .topBarLeading) {
+                    // いま鳴っているのが暗記の音声なら停止。そうでなければ(何も鳴っていない or
+                    // 音読の音声がミニプレイヤーで鳴っている)ワンクリックで暗記を再生開始する
                     Button {
-                        if isPlayingSequence {
+                        if recallActive {
                             speech.stop()
                             AudioSequencePlayer.shared.stop()
                         } else {
                             startPlayback(from: nil)
                         }
                     } label: {
-                        Image(systemName: isPlayingSequence ? "stop.circle.fill" : "play.circle.fill")
-                            .foregroundStyle(isPlayingSequence ? .red : Color.accentColor)
+                        Image(systemName: recallActive ? "stop.circle.fill" : "play.circle.fill")
+                            .foregroundStyle(recallActive ? .red : Color.accentColor)
                     }
-                    .disabled(!isPlayingSequence && visibleItems.isEmpty)
+                    .disabled(!recallActive && visibleItems.isEmpty)
                 }
                 // 覚えた!の表示/非表示(緑=表示中、グレー=非表示中)
                 ToolbarItem(placement: .primaryAction) {
@@ -208,6 +212,12 @@ struct RecallListView: View {
                 .combineLatest(AudioSequencePlayer.shared.$isPlayingSequence)) { tts, audio in
                 let playing = tts || audio
                 if isPlayingSequence != playing { isPlayingSequence = playing }
+            }
+            // 暗記の音声が鳴っているか(音読の音声を鳴らしている時は false → 暗記ボタンは再生開始になる)
+            .onReceive(AudioSequencePlayer.shared.$isPlayingSequence
+                .combineLatest(AudioSequencePlayer.shared.$source)) { playing, src in
+                let active = playing && src == .recall
+                if recallActive != active { recallActive = active }
             }
         }
         // 詳細画面(階層あり)ではタブバーを隠す。

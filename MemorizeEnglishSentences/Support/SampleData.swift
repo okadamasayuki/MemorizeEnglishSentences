@@ -370,6 +370,19 @@ enum SampleData {
         UserDefaults.standard.set(true, forKey: key)
     }
 
+    /// 和訳音声を雀松朱司の一声に絞ったので、他の声(ja_audio_variants)を一度だけ削除して容量を空ける。
+    /// 既定の声は Documents/ja_audio にあるので影響しない。
+    static func removeUnusedVoiceVariantsIfNeeded() {
+        let key = "didRemoveVoiceVariants_v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ja_audio_variants")
+        try? FileManager.default.removeItem(at: dir)
+        // 以前に別の声を選んでいたら既定へ戻す
+        UserDefaults.standard.set("", forKey: "jaVoiceVariant")
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     /// 履歴タブを廃止したので、調べた単語の履歴(LookedUpWord)を一度だけ全削除する。
     /// 他タブとはリレーションがない独立データなので、他タブには影響しない。
     static func removeLookupHistoryIfNeeded(context: ModelContext) {
