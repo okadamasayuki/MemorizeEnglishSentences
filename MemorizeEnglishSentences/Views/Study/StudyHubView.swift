@@ -123,51 +123,70 @@ struct StudyHubView: View {
         .listStyle(.plain)
     }
 
+    /// この文が入っている「教材音声のあるブロック英文」を返す。
+    /// 音声は Block 単位(Passage全文ではない)で持つので、必ず Block.englishText を使う。
+    /// 保存済みblockEn(音声あり)を最優先、無ければブロックを本文検索する。
+    private func audioBlockText(for s: StudyStore.FlaggedSentence, allBlocks: [Block]) -> String? {
+        let saved = s.blockEn.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !saved.isEmpty, BlockAudioStore.hasAudio(forBlockText: saved) { return saved }
+        let sent = s.en.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sent.isEmpty else { return nil }
+        // 音声のあるブロックを優先。無ければ本文一致のブロックだけでも返す
+        if let b = allBlocks.first(where: {
+            $0.englishText.contains(sent) && BlockAudioStore.hasAudio(forBlockText: $0.englishText)
+        }) { return b.englishText }
+        return allBlocks.first(where: { $0.englishText.contains(sent) })?.englishText
+    }
+
+    /// 1ブロック分のチェック文だけを鳴らす AudioPlaybackItem を作る(該当文=回数1、他=0)
+    private func buildItem(blockText bt: String, japanese: String, flaggedEns ens: Set<String>) -> AudioPlaybackItem? {
+        guard BlockAudioStore.hasAudio(forBlockText: bt),
+              let a = BlockAudioStore.item(forBlockText: bt),
+              let pairs = SentencePairLookup.cached(blockText: bt, modelContext: context),
+              let segments = AudioPlaybackItem.buildSegments(
+                  english: bt, pairs: pairs.map { ($0.en, $0.ja) }, words: a.words)
+        else { return nil }
+        let counts = segments.map {
+            ens.contains($0.en.trimmingCharacters(in: .whitespacesAndNewlines)) ? 1 : 0
+        }
+        guard counts.contains(where: { $0 > 0 }) else { return nil }
+        return AudioPlaybackItem(english: bt, japanese: japanese, url: a.url, words: a.words,
+                                 segments: segments, repeatCounts: counts,
+                                 silences: a.silences, blockRepeat: 1)
+    }
+
     /// チェックした英文を、教材の本物音声(音読タブと同じ)で上から順番に読み上げる。
-    /// 出典ブロックのMP3を使い、その文だけを鳴らす(他の文はスキップ)。
+    /// 出典ブロック(Block単位)のMP3を使い、その文だけを鳴らす(他の文はスキップ)。
     /// 音声が見つからない文しか無ければ、従来の読み上げ(合成音声)にフォールバックする。
     private func playFlaggedSentences() {
         let flaggedList = store.flagged
         guard !flaggedList.isEmpty else { return }
-        let allPassages = (try? context.fetch(FetchDescriptor<Passage>())) ?? []
+        let allBlocks = (try? context.fetch(FetchDescriptor<Block>())) ?? []
 
-        // 各チェック文の出典ブロック全文を求める(保存済みblockEn優先、無ければ本文検索)
-        func blockText(for s: StudyStore.FlaggedSentence) -> String? {
-            let saved = s.blockEn.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !saved.isEmpty { return saved }
-            let sent = s.en.trimmingCharacters(in: .whitespacesAndNewlines)
-            return allPassages.first { $0.englishFullText.contains(sent) }?.englishFullText
-        }
-
-        // ブロック全文 → そのブロックでチェックされた文(英文)の集合
+        // ブロック英文 → そのブロックでチェックされた文(英文)の集合
         var byBlock: [String: Set<String>] = [:]
         for s in flaggedList {
-            guard let bt = blockText(for: s) else { continue }
+            guard let bt = audioBlockText(for: s, allBlocks: allBlocks) else { continue }
             byBlock[bt, default: []].insert(s.en.trimmingCharacters(in: .whitespacesAndNewlines))
         }
 
-        // ブロックは文章の並び順で(該当passageが無いものは後ろへ)
-        let ordered = allPassages.map { $0.englishFullText }.filter { byBlock[$0] != nil }
-        let extras = byBlock.keys.filter { !ordered.contains($0) }
-
+        // ブロックを並び順で(文章順→ブロック番号順)処理し、その文だけ鳴らすitemを作る
+        let orderedBlocks = allBlocks.sorted {
+            ($0.passage?.sortIndex ?? 0, $0.index) < ($1.passage?.sortIndex ?? 0, $1.index)
+        }
         var items: [AudioPlaybackItem] = []
-        for bt in ordered + extras {
-            guard let ens = byBlock[bt],
-                  BlockAudioStore.hasAudio(forBlockText: bt),
-                  let a = BlockAudioStore.item(forBlockText: bt),
-                  let pairs = SentencePairLookup.cached(blockText: bt, modelContext: context),
-                  let segments = AudioPlaybackItem.buildSegments(
-                      english: bt, pairs: pairs.map { ($0.en, $0.ja) }, words: a.words)
-            else { continue }
-            // チェック済みの文だけ回数1、他の文は0(=スキップ)にして、その文だけ鳴らす
-            let counts = segments.map {
-                ens.contains($0.en.trimmingCharacters(in: .whitespacesAndNewlines)) ? 1 : 0
+        var used = Set<String>()
+        for blk in orderedBlocks {
+            let bt = blk.englishText
+            guard let ens = byBlock[bt], !used.contains(bt) else { continue }
+            used.insert(bt)
+            if let item = buildItem(blockText: bt, japanese: blk.japaneseText ?? "", flaggedEns: ens) {
+                items.append(item)
             }
-            guard counts.contains(where: { $0 > 0 }) else { continue }
-            let jp = allPassages.first { $0.englishFullText == bt }?.japaneseFullText ?? ""
-            items.append(AudioPlaybackItem(english: bt, japanese: jp, url: a.url, words: a.words,
-                                           segments: segments, repeatCounts: counts,
-                                           silences: a.silences, blockRepeat: 1))
+        }
+        // 文章が消えている等でブロックに紐づかない分も、blockEn から拾う
+        for (bt, ens) in byBlock where !used.contains(bt) {
+            if let item = buildItem(blockText: bt, japanese: "", flaggedEns: ens) { items.append(item) }
         }
 
         AudioSequencePlayer.shared.stop()
@@ -185,17 +204,19 @@ struct StudyHubView: View {
         showAudioPlayer = true
     }
 
-    /// 古いチェック文(出典ブロック未記録)に、本文検索でブロック全文を紐づける。
-    /// これで教材音声の再生も、文脈に合った意味引きも効くようになる。
+    /// 古い/誤ったブロック参照(未記録、または音声が無いブロック=Passage全文を誤登録していた等)を、
+    /// Block単位の本文検索で「教材音声のあるブロック英文」に貼り直す。
     private func backfillBlockRefs() {
-        let needs = store.flagged.filter { $0.blockEn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let needs = store.flagged.filter {
+            let b = $0.blockEn.trimmingCharacters(in: .whitespacesAndNewlines)
+            return b.isEmpty || !BlockAudioStore.hasAudio(forBlockText: b)
+        }
         guard !needs.isEmpty else { return }
-        let allPassages = (try? context.fetch(FetchDescriptor<Passage>())) ?? []
-        guard !allPassages.isEmpty else { return }
+        let allBlocks = (try? context.fetch(FetchDescriptor<Block>())) ?? []
+        guard !allBlocks.isEmpty else { return }
         for s in needs {
-            let sent = s.en.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let block = allPassages.first(where: { $0.englishFullText.contains(sent) })?.englishFullText {
-                store.setBlockEn(s.id, blockEn: block)
+            if let bt = audioBlockText(for: s, allBlocks: allBlocks) {
+                store.setBlockEn(s.id, blockEn: bt)
             }
         }
     }
