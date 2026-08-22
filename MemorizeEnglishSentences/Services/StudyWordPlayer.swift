@@ -20,6 +20,8 @@ final class StudyWordPlayer: NSObject, ObservableObject {
     /// 英語②(2回目)を読み終えてから次の語へ進むまでの間(秒)。速度切り替えで変える。
     /// 本家シス単の実測(単語間 約1.2秒)を「普通」に採用
     var gap: Double = 1.2
+    /// 一番下まで来たら先頭に戻って繰り返すか(リピート)
+    var loop: Bool = false
 
     // 本家シス単の音声を実測して合わせた、語の中の間(秒)
     /// 英語① → 日本語の意味 の間
@@ -114,12 +116,20 @@ final class StudyWordPlayer: NSObject, ObservableObject {
         guard !meaning.isEmpty else { step3En(my, w); return }
         DispatchQueue.main.asyncAfter(deadline: .now() + gapEnToJa) { [weak self] in
             guard let self, my == self.token else { return }
-            let u = AVSpeechUtterance(string: meaning)
-            u.voice = AVSpeechSynthesisVoice(language: "ja-JP")
-            // ② 日本語の意味 → 読み終わったら英語2回目へ
-            self.afterJa = { [weak self] in self?.step3En(my, w) }
-            self.jaSynth.speak(u)
+            // ② 日本語の意味 → Googleの音声(翻訳と同じ声)で読む。取れなければ内蔵読み上げ。
+            //    読み終わったら英語2回目へ
+            GoogleTTS.shared.speak(meaning, lang: "ja",
+                                   onFallback: { self.speakJaFallback(meaning) },
+                                   onFinished: { [weak self] in self?.step3En(my, w) })
         }
+    }
+
+    /// Googleの日本語音声が取れないとき(オフライン等)の内蔵読み上げフォールバック
+    private func speakJaFallback(_ meaning: String) {
+        let u = AVSpeechUtterance(string: meaning)
+        u.voice = AVSpeechSynthesisVoice(language: "ja-JP")
+        jaSynth.stopSpeaking(at: .immediate)
+        jaSynth.speak(u)
     }
 
     private func step3En(_ my: Int, _ w: StudyStore.StudyWord) {
@@ -140,8 +150,11 @@ final class StudyWordPlayer: NSObject, ObservableObject {
             if self.index + 1 < self.words.count {
                 self.index += 1
                 self.speakCurrent()
+            } else if self.loop {
+                self.index = 0            // 一番下まで来たら先頭に戻って続ける(ループ)
+                self.speakCurrent()
             } else {
-                self.isPlaying = false  // 最後まで来たら止まる
+                self.isPlaying = false    // 最後まで来たら止まる
             }
         }
         advanceWork = work

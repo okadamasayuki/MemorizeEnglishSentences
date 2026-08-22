@@ -11,6 +11,8 @@ struct StudyWordPlayerView: View {
     /// 1語を読み終えてから次へ進むまでの間(秒)。速い/普通/ゆっくり。アプリを閉じても記憶。
     /// 「普通」は本家シス単の実測(単語間 約1.2秒)に合わせている
     @AppStorage("studyWordGap") private var gap = 1.2
+    /// 一番下まで来たら先頭に戻って繰り返す(リピート)。アプリを閉じても記憶
+    @AppStorage("studyWordLoop") private var loop = false
 
     // 英→和→英の3回読むので、ここでは語と語の間だけを持たせる(語の中の間はエンジン側で固定)
     private let gaps: [(String, Double)] = [("速い", 0.7), ("普通", 1.2), ("ゆっくり", 2.2)]
@@ -70,8 +72,13 @@ struct StudyWordPlayerView: View {
             }
             .padding(.horizontal, 24)
 
-            // 前 / 再生・一時停止 / 次
-            HStack(spacing: 24) {
+            // 先頭へ / 前 / 再生・一時停止 / 次 / リピート
+            HStack(spacing: 18) {
+                // 一番上(先頭)に戻る
+                Button { player.jump(to: 0) } label: {
+                    Image(systemName: "arrow.up.to.line").font(.title3)
+                }
+                .buttonStyle(.bordered)
                 Button { player.prev() } label: {
                     Image(systemName: "backward.fill").font(.title2)
                 }
@@ -80,11 +87,20 @@ struct StudyWordPlayerView: View {
                     player.toggle()
                 } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.title).frame(minWidth: 64)
+                        .font(.title).frame(minWidth: 56)
                 }
                 .buttonStyle(.borderedProminent)
                 Button { player.next() } label: {
                     Image(systemName: "forward.fill").font(.title2)
+                }
+                .buttonStyle(.bordered)
+                // リピート(一番下まで来たら先頭へ戻って繰り返す)。ONは青
+                Button {
+                    loop.toggle()
+                    player.loop = loop
+                } label: {
+                    Image(systemName: "repeat").font(.title3)
+                        .foregroundStyle(loop ? Color.accentColor : Color.secondary)
                 }
                 .buttonStyle(.bordered)
             }
@@ -92,6 +108,7 @@ struct StudyWordPlayerView: View {
         }
         .onAppear {
             player.gap = gap
+            player.loop = loop
             // ミニプレイヤーから開き直した時(再生継続中)は続きから。
             // 初めて開いた時だけ、単語をセットして最初から再生する
             if !player.sessionActive {

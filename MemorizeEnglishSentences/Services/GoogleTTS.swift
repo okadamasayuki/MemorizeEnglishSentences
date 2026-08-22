@@ -34,8 +34,13 @@ final class GoogleTTS: NSObject {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("word_audio")
     }
-    private func diskURL(for word: String) -> URL {
-        let digest = SHA256.hash(data: Data(word.utf8))
+    /// ディスク/メモリのキー。英語は従来どおり単語そのもの(事前DL資産と互換)、
+    /// それ以外の言語は "lang:テキスト" にして英語と衝突させない
+    private func cacheKey(_ text: String, lang: String) -> String {
+        lang == "en" ? text : "\(lang):\(text)"
+    }
+    private func diskURL(forKey key: String) -> URL {
+        let digest = SHA256.hash(data: Data(key.utf8))
         let name = String(digest.map { String(format: "%02x", $0) }.joined().prefix(16))
         return Self.dir.appendingPathComponent("\(name).mp3")
     }
@@ -49,29 +54,33 @@ final class GoogleTTS: NSObject {
         "address","contest","impact","upset","reject","research","construct","graduate",
     ]
 
-    /// 発音する。posJa(名詞/動詞など)が分かればヘテロニムを品詞に合わせて発音する。
+    /// 発音する。lang="en"は英単語(既定・事前DL資産つき)、lang="ja"は日本語(意味の読み上げ)など。
+    /// posJa(名詞/動詞など)が分かればヘテロニムを品詞に合わせて発音する(英語のみ)。
     /// 失敗時は onFallback を呼ぶ(内蔵TTS用)。onFinished は再生が終わったら一度だけ呼ぶ
     /// (シス単風の 英→和→英 の連鎖に使う。フォールバック時も鳴り終わり相当で呼ぶ)。
-    func speak(_ text: String, posJa: String? = nil,
+    func speak(_ text: String, lang: String = "en", posJa: String? = nil,
                onFallback: @escaping () -> Void, onFinished: (() -> Void)? = nil) {
         var word = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !word.isEmpty else { onFinished?(); return }
-        // ヘテロニムは品詞に応じてキャリアフレーズに置き換える
-        let lower = word.lowercased()
-        if Self.heteronyms.contains(lower), let pos = posJa {
-            if pos.contains("動詞") { word = "to \(lower)" }
-            else if pos.contains("名詞") { word = "the \(lower)" }
+        // ヘテロニムは品詞に応じてキャリアフレーズに置き換える(英語のみ)
+        if lang == "en" {
+            let lower = word.lowercased()
+            if Self.heteronyms.contains(lower), let pos = posJa {
+                if pos.contains("動詞") { word = "to \(lower)" }
+                else if pos.contains("名詞") { word = "the \(lower)" }
+            }
         }
+        let ckey = cacheKey(word, lang: lang)
 
         // 取得済み(メモリ)ならそのまま鳴らす
-        if let data = cache[word] {
+        if let data = cache[ckey] {
             play(data, fallbackText: word, onFallback: onFallback, onFinished: onFinished)
             return
         }
-        // 事前ダウンロード済み(ディスク)ならオフラインでもGoogle音声で鳴らす
-        let disk = diskURL(for: word)
+        // 事前ダウンロード済み/一度取得済み(ディスク)ならオフラインでもGoogle音声で鳴らす
+        let disk = diskURL(forKey: ckey)
         if let data = try? Data(contentsOf: disk), data.count > 200 {
-            cache[word] = data
+            cache[ckey] = data
             play(data, fallbackText: word, onFallback: onFallback, onFinished: onFinished)
             return
         }
@@ -82,7 +91,7 @@ final class GoogleTTS: NSObject {
             return
         }
         guard let encoded = word.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q=\(encoded)") else {
+              let url = URL(string: "https://translate.google.com/translate_tts?ie=UTF-8&tl=\(lang)&client=tw-ob&q=\(encoded)") else {
             onFallback()
             finishAfterFallback(word, onFinished)
             return
@@ -97,7 +106,10 @@ final class GoogleTTS: NSObject {
                 DispatchQueue.main.async { onFallback(); self?.finishAfterFallback(word, onFinished) }
                 return
             }
-            self.cache[word] = data
+            self.cache[ckey] = data
+            // 次回・オフラインでも鳴らせるようディスクにも残す(日本語の意味などの再取得を防ぐ)
+            try? FileManager.default.createDirectory(at: Self.dir, withIntermediateDirectories: true)
+            try? data.write(to: disk, options: .atomic)
             DispatchQueue.main.async { self.play(data, fallbackText: word, onFallback: onFallback, onFinished: onFinished) }
         }.resume()
     }
