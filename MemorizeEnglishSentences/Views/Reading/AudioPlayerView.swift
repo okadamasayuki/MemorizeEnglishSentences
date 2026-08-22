@@ -20,8 +20,7 @@ struct AudioPlayerView: View {
     /// ブロック全体の繰り返し回数(全項目共通)
     @State private var blockCount: Int = 1
     /// このブロックで報告済みの文番号(押した丸を赤く塗る目印)
-    @State private var reportedHeads: Set<Int> = []
-    @State private var reportedTails: Set<Int> = []
+    @State private var reportedEn: Set<Int> = []
     @State private var reportedJas: Set<Int> = []
     /// ページめくりの選択状態。プレイヤー内部の更新を待つと
     /// スワイプが一瞬引き戻される変なモーションになるため、ローカルで即時に持つ
@@ -212,8 +211,7 @@ struct AudioPlayerView: View {
         // ブロックが変わったら、そのブロックの保存済み回数設定を読み込む
         .onChange(of: audio.sequenceIndex) { _, _ in
             syncCounts()
-            reportedHeads.removeAll()
-            reportedTails.removeAll()
+            reportedEn.removeAll()
             reportedJas.removeAll()
         }
     }
@@ -292,15 +290,11 @@ struct AudioPlayerView: View {
                                 }
                                 .buttonStyle(.plain)
                                 if isCurrent {
-                                    // 頭=文頭が変(押すと赤くなり改善タブへ自動追加)
-                                    reportLabeledDot("頭", reported: reportedHeads.contains(i)) {
-                                        reportedHeads.insert(i)
-                                        reportSegmentIssue(seg: seg, index: i, part: "文頭")
-                                    }
-                                    // 末=文末が変
-                                    reportLabeledDot("末", reported: reportedTails.contains(i)) {
-                                        reportedTails.insert(i)
-                                        reportSegmentIssue(seg: seg, index: i, part: "文末")
+                                    // 英=英文の区切りが変(文頭/文末のどちらか)。押すと赤くなり改善タブへ自動追加。
+                                    // 修正側で文頭・文末の両方を解析してズレている側を直すので、統合しても精度は落ちない
+                                    reportLabeledDot("英", reported: reportedEn.contains(i)) {
+                                        reportedEn.insert(i)
+                                        reportSegmentIssue(seg: seg, index: i)
                                     }
                                     // 日=和訳の読み方(日本語)がおかしい
                                     reportLabeledDot("日", reported: reportedJas.contains(i)) {
@@ -420,11 +414,12 @@ struct AudioPlayerView: View {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
-    /// 切れ目が変な文の報告を改善タブの一覧へ書き込む(あとでスワイプしてMacへ送る)
-    private func reportSegmentIssue(seg: AudioSegment, index: Int, part: String) {
+    /// 英文の区切りが変な文の報告を改善タブの一覧へ書き込む(あとでスワイプしてMacへ送る)。
+    /// 文頭/文末のどちらが変かは指定せず、修正側で両方を解析してズレた側を直す。
+    private func reportSegmentIssue(seg: AudioSegment, index: Int) {
         let block = audio.currentItem?.english ?? ""
         let report = """
-        【音声の区切り修正】\(part)が変
+        【音声の区切り修正】英文の区切りが変
         文: \(seg.en)
         (項目\((audio.sequenceIndex ?? 0) + 1)・文\(index + 1)、ブロック先頭: \(String(block.prefix(60)))…)
         """
