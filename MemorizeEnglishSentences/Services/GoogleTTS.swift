@@ -1,4 +1,5 @@
 import AVFoundation
+import CryptoKit
 import Foundation
 import Network
 
@@ -25,17 +26,52 @@ final class GoogleTTS: NSObject {
         monitor.start(queue: DispatchQueue(label: "googletts.net"))
     }
 
-    /// 英語(tl=en)として発音する。失敗時は onFallback を呼ぶ(内蔵TTS用)
-    func speak(_ text: String, onFallback: @escaping () -> Void) {
-        let word = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !word.isEmpty else { return }
+    /// 事前ダウンロードした発音mp3の置き場(Documents/word_audio/<sha16>.mp3)。
+    /// Claude Code が全単語・熟語分を投入する。これがあればオフラインでもGoogle音声で鳴る
+    private static var dir: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("word_audio")
+    }
+    private func diskURL(for word: String) -> URL {
+        let digest = SHA256.hash(data: Data(word.utf8))
+        let name = String(digest.map { String(format: "%02x", $0) }.joined().prefix(16))
+        return Self.dir.appendingPathComponent("\(name).mp3")
+    }
 
-        // 取得済みならオフラインでもそのまま鳴らす
+    /// 品詞で発音が変わる語(use=名詞/juːs/・動詞/juːz/, record など)。
+    /// 単語だけだと発音が固定になるため、名詞は "the X"、動詞は "to X" の
+    /// 実在フレーズで読ませて、その文での品詞に合った発音にする。
+    private static let heteronyms: Set<String> = [
+        "use","record","present","subject","produce","contract","conflict","contrast",
+        "increase","decrease","progress","project","refuse","export","insult","protest",
+        "address","contest","impact","upset","reject","research","construct","graduate",
+    ]
+
+    /// 発音する。posJa(名詞/動詞など)が分かればヘテロニムを品詞に合わせて発音する。
+    /// 失敗時は onFallback を呼ぶ(内蔵TTS用)
+    func speak(_ text: String, posJa: String? = nil, onFallback: @escaping () -> Void) {
+        var word = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !word.isEmpty else { return }
+        // ヘテロニムは品詞に応じてキャリアフレーズに置き換える
+        let lower = word.lowercased()
+        if Self.heteronyms.contains(lower), let pos = posJa {
+            if pos.contains("動詞") { word = "to \(lower)" }
+            else if pos.contains("名詞") { word = "the \(lower)" }
+        }
+
+        // 取得済み(メモリ)ならそのまま鳴らす
         if let data = cache[word] {
             play(data, fallbackText: word, onFallback: onFallback)
             return
         }
-        // オフラインならネットを待たずに即・内蔵音声(数秒固まるのを防ぐ)
+        // 事前ダウンロード済み(ディスク)ならオフラインでもGoogle音声で鳴らす
+        let disk = diskURL(for: word)
+        if let data = try? Data(contentsOf: disk), data.count > 200 {
+            cache[word] = data
+            play(data, fallbackText: word, onFallback: onFallback)
+            return
+        }
+        // オフラインでディスクにも無ければ、待たずに即・内蔵音声
         if !isOnline {
             onFallback()
             return

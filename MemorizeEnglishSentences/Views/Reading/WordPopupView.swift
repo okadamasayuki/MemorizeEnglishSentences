@@ -60,8 +60,9 @@ struct WordPopupView: View {
 
             HStack(spacing: 12) {
                 Button {
-                    // Google翻訳と同じ発音音声。取れなければ内蔵の読み上げにフォールバック
-                    GoogleTTS.shared.speak(word) {
+                    // Google翻訳と同じ発音音声(品詞が分かればヘテロニムを文脈に合わせる)。
+                    // 取れなければ内蔵の読み上げにフォールバック
+                    GoogleTTS.shared.speak(word, posJa: meaning.pos) {
                         SpeechSynthesisService.shared.speak(word)
                     }
                 } label: {
