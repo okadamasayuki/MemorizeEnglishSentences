@@ -12,6 +12,8 @@ struct ImprovementListView: View {
     @ObservedObject private var resultStore = ImprovementResultStore.shared
     /// 全文表示する対応結果
     @State private var resultDetail: ImprovementResult?
+    /// 「対応済み」を一括削除する前の確認
+    @State private var showClearResultsConfirm = false
     /// 日本語の書き取り(長い口述でも切れないよう自動再開する)
     @State private var dictation = SpeechRecognitionService(locale: Locale(identifier: "ja-JP"))
 
@@ -78,6 +80,14 @@ struct ImprovementListView: View {
                 Button("OK") { errorMessage = nil }
             } message: {
                 Text(errorMessage ?? "")
+            }
+            // 対応済みの一括全消去(確認してから)
+            .confirmationDialog("対応済みをすべて消去しますか?",
+                                isPresented: $showClearResultsConfirm, titleVisibility: .visible) {
+                Button("すべて消去", role: .destructive) { resultStore.removeAll() }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("対応済み\(resultStore.results.count)件をまとめて消します。")
             }
             // 声で入れたメモは数行になりがちで、アラートの1行欄では直しづらい。
             // 全体を見渡しながら書き直せる広い欄をシートで出す。
@@ -283,7 +293,7 @@ struct ImprovementListView: View {
     // MARK: - 対応済み(Claude Codeからの結果報告)
 
     private var resultsSection: some View {
-        Section("対応済み") {
+        Section {
             ForEach(resultStore.results) { result in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(result.title)
@@ -306,6 +316,16 @@ struct ImprovementListView: View {
                         Image(systemName: "trash")
                     }
                 }
+            }
+        } header: {
+            // 見出しの右端に「全消去」。誤操作を防ぐため確認してから消す
+            HStack {
+                Text("対応済み")
+                Spacer()
+                Button("全消去") { showClearResultsConfirm = true }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.red)
+                    .textCase(nil)
             }
         }
     }

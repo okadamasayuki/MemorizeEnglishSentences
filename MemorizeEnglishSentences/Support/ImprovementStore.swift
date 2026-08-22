@@ -46,6 +46,12 @@ final class ImprovementResultStore: ObservableObject {
             try? data.write(to: fileURL, options: .atomic)
         }
     }
+
+    /// 対応済みを一括で全消去する
+    func removeAll() {
+        results = []
+        try? JSONEncoder().encode([ImprovementResult]()).write(to: fileURL, options: .atomic)
+    }
 }
 
 /// アプリ自体への改善要望のひとつ。
