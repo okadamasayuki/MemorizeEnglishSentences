@@ -1,7 +1,9 @@
+import AVFoundation
 import SwiftUI
 
 /// 覚える単語リストをシス単風に再生する画面。
-/// 単語+意味を並べ、今の単語をハイライトして自動送り。各単語はGoogle発音(オフライン可)で読む。
+/// 単語+意味を並べ、今の単語をハイライトして自動送り。
+/// 各単語は「英語(Google発音・オフライン可)→ 日本語の意味」の順で読む。
 struct StudyWordPlayerView: View {
     let words: [StudyStore.StudyWord]
     @Environment(\.dismiss) private var dismiss
@@ -12,7 +14,10 @@ struct StudyWordPlayerView: View {
     /// 1単語あたりの間隔(秒)。速い/普通/ゆっくり
     @AppStorage("studyWordInterval") private var interval = 2.5
 
-    private let intervals: [(String, Double)] = [("速い", 1.8), ("普通", 2.5), ("ゆっくり", 3.5)]
+    // 英語+日本語の2つを読むので、間隔は少し長めにする
+    private let intervals: [(String, Double)] = [("速い", 2.8), ("普通", 3.8), ("ゆっくり", 5.0)]
+    /// 日本語の意味読み上げ用
+    private let jaSynth = AVSpeechSynthesizer()
 
     var body: some View {
         VStack(spacing: 16) {
@@ -136,8 +141,18 @@ struct StudyWordPlayerView: View {
     }
     private func speakCurrent() {
         guard words.indices.contains(index) else { return }
-        let w = words[index].word
-        GoogleTTS.shared.speak(w) { SpeechSynthesisService.shared.speak(w) }
+        let item = words[index]
+        // シス単風: まず英語、少し置いて日本語の意味
+        GoogleTTS.shared.speak(item.word) { SpeechSynthesisService.shared.speak(item.word) }
+        let meaning = item.meaning.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !meaning.isEmpty else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+            guard isPlaying || true else { return }  // 手動送りでも意味は読む
+            let u = AVSpeechUtterance(string: meaning)
+            u.voice = AVSpeechSynthesisVoice(language: "ja-JP")
+            jaSynth.stopSpeaking(at: .immediate)
+            jaSynth.speak(u)
+        }
     }
     private func restartTimer() {
         timer?.invalidate()

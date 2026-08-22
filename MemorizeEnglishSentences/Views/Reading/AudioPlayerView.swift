@@ -6,6 +6,8 @@ import UIKit
 /// 操作はTTS版(SentencePlayerView)と同じ: 前後・一時停止・速度・各文2回読み。
 struct AudioPlayerView: View {
     @ObservedObject private var audio = AudioSequencePlayer.shared
+    /// 各文の「あとで単語チェックする文」フラグ(しおり)の状態を監視する
+    @ObservedObject private var study = StudyStore.shared
     @Environment(\.dismiss) private var dismiss
     /// 読み上げ速度倍率(1.0=標準)。TTS版と共有・記憶
     @AppStorage("listenSpeed") private var listenSpeed = 1.0
@@ -26,8 +28,6 @@ struct AudioPlayerView: View {
     @State private var pageSelection = 0
     /// ページングスクロールの現在ページ(スクロールが落ち着くと更新される)
     @State private var scrollID: Int?
-    /// いまの文が「あとで単語チェックする文」に登録済みか(しおりボタンの塗り)
-    @State private var flaggedNow = false
 
     // 教材音声はレート変換の音質を考慮して 0.5〜2x
     private let speedOptions: [Double] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
@@ -85,20 +85,6 @@ struct AudioPlayerView: View {
                         .background(Capsule().fill(blockCount > 1 ? Color.accentColor
                                                                   : Color(.secondarySystemBackground)))
                         .foregroundStyle(blockCount > 1 ? Color.white : Color.primary)
-                }
-                .buttonStyle(.plain)
-                // 歩きながらワンタップ: いま流れている英文を「あとで単語をチェックする文」に登録
-                Button {
-                    if let en = audio.currentSentence {
-                        StudyStore.shared.toggleFlag(en: en, ja: audio.currentSentenceJa ?? "")
-                        flaggedNow = StudyStore.shared.isFlagged(en: en)
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    }
-                } label: {
-                    Image(systemName: flaggedNow ? "bookmark.fill" : "bookmark")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(flaggedNow ? .orange : Color.primary)
-                        .frame(width: 26, height: 26)
                 }
                 .buttonStyle(.plain)
                 Button {
@@ -222,11 +208,6 @@ struct AudioPlayerView: View {
             syncCounts()
             pageSelection = audio.sequenceIndex ?? 0
             scrollID = audio.sequenceIndex ?? 0
-            flaggedNow = audio.currentSentence.map { StudyStore.shared.isFlagged(en: $0) } ?? false
-        }
-        // 文が切り替わったら、しおりボタンの状態を今の文に合わせる
-        .onReceive(audio.$currentSentence) { en in
-            flaggedNow = en.map { StudyStore.shared.isFlagged(en: $0) } ?? false
         }
         // ブロックが変わったら、そのブロックの保存済み回数設定を読み込む
         .onChange(of: audio.sequenceIndex) { _, _ in
@@ -296,12 +277,21 @@ struct AudioPlayerView: View {
                             .opacity(countFor(i) == 0 ? 0.35 : 1)
                             .id(i)
 
-                            // この文の再生回数(記憶される)。×3は廃止し、タップで ×1↔×2。
-                            // 表示中のページだけに出す(スワイプ途中の隣ページには出さない)
-                            if isCurrent {
-                                // 文ごとの×N(繰り返し)ボタンは使われないため廃止(2026-08-22)。
-                                // 区切り・読み方の報告ボタンだけ残す
-                                VStack(spacing: 8) {
+                            // 右側の操作列。しおりは全ての文に付けられる(今流れている文以外=
+                            // 1つ前の文などにも付けられる)。区切り/読み方の報告は表示中の文だけに出す。
+                            VStack(spacing: 8) {
+                                // しおり=あとで単語をチェックする文として登録(歩きながらワンタップ)
+                                Button {
+                                    study.toggleFlag(en: seg.en, ja: seg.ja)
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                } label: {
+                                    Image(systemName: study.isFlagged(en: seg.en) ? "bookmark.fill" : "bookmark")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(study.isFlagged(en: seg.en) ? .orange : .secondary)
+                                        .frame(width: 26, height: 26)
+                                }
+                                .buttonStyle(.plain)
+                                if isCurrent {
                                     // 頭=文頭が変(押すと赤くなり改善タブへ自動追加)
                                     reportLabeledDot("頭", reported: reportedHeads.contains(i)) {
                                         reportedHeads.insert(i)
