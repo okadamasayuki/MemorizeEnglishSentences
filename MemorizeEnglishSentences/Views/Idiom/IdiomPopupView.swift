@@ -48,7 +48,10 @@ struct IdiomPopupView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Button {
-                SpeechSynthesisService.shared.speak(speakText)
+                // Google翻訳と同じ発音音声。取れなければ内蔵の読み上げにフォールバック
+                GoogleTTS.shared.speak(speakText) {
+                    SpeechSynthesisService.shared.speak(speakText)
+                }
             } label: {
                 Label("発音", systemImage: "speaker.wave.2.fill")
             }

@@ -60,7 +60,10 @@ struct WordPopupView: View {
 
             HStack(spacing: 12) {
                 Button {
-                    SpeechSynthesisService.shared.speak(word)
+                    // Google翻訳と同じ発音音声。取れなければ内蔵の読み上げにフォールバック
+                    GoogleTTS.shared.speak(word) {
+                        SpeechSynthesisService.shared.speak(word)
+                    }
                 } label: {
                     Label("発音", systemImage: "speaker.wave.2.fill")
                 }

@@ -225,7 +225,8 @@ enum MacBridge {
         for item in list {
             guard let key = item["key"] as? String,
                   let pairs = item["pairs"] as? [[String: String]],
-                  let json = try? JSONSerialization.data(withJSONObject: pairs),
+                  // キー順を固定して、毎回の再取り込みで無駄に更新扱いにならないようにする
+                  let json = try? JSONSerialization.data(withJSONObject: pairs, options: [.sortedKeys]),
                   let jsonString = String(data: json, encoding: .utf8) else { continue }
             if let entry = existing[key] {
                 if entry.pairsJSON != jsonString {

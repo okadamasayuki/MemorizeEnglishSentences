@@ -118,6 +118,10 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     /// 現在ブロックの再生進捗(回数設定を織り込んだ位置/合計)
     let progress = PlaybackProgress()
 
+    /// 再生中の音声がどのタブのものか(音読/暗記)。タブ間で誤再生しないための目印
+    enum Source { case reading, recall }
+    @Published var source: Source?
+
     @Published var isPlayingSequence = false
     @Published var isPaused = false
     /// 今読んでいるブロックの番号(0始まり)
@@ -296,10 +300,11 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     }
 
     /// 連続再生を開始する(startAt番目から)
-    func start(items: [AudioPlaybackItem], startAt: Int, speed: Double) {
+    func start(items: [AudioPlaybackItem], startAt: Int, speed: Double, source: Source = .reading) {
         stop()
         SpeechSynthesisService.shared.stop()  // TTSと同時再生しない
         guard !items.isEmpty else { return }
+        self.source = source
         self.items = items
         self.speed = speed
         jaAfterSentence = UserDefaults.standard.bool(forKey: "audioJaAfterSentence")
@@ -488,6 +493,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         blockPassesDone = 0
         curSeg = 0
         curRep = 0
+        source = nil
         updateNowPlaying()
     }
 

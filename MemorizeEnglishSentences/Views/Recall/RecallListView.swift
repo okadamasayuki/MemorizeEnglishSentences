@@ -74,7 +74,7 @@ struct RecallListView: View {
             if !items.isEmpty {
                 let startIndex = passage
                     .flatMap { p in audioTargets.firstIndex { $0.persistentModelID == p.persistentModelID } } ?? 0
-                AudioSequencePlayer.shared.start(items: items, startAt: startIndex, speed: listenSpeed)
+                AudioSequencePlayer.shared.start(items: items, startAt: startIndex, speed: listenSpeed, source: .recall)
                 showAudioPlayer = true
                 return
             }

@@ -113,7 +113,7 @@ struct PassageListView: View {
             let keys = audioTargets.map { playbackKey(for: $0) }
             let startIndex = startKey.flatMap { keys.firstIndex(of: $0) } ?? 0
             playerKeys = keys
-            audioPlayer.start(items: items, startAt: startIndex, speed: listenSpeed)
+            audioPlayer.start(items: items, startAt: startIndex, speed: listenSpeed, source: .reading)
             showAudioPlayer = true
             return
         }
@@ -240,26 +240,18 @@ struct PassageListView: View {
                     // 教材音声プレイヤーが動いている間(ミニプレイヤー中)は、右上を
                     // 停止ではなく「全画面プレイヤーを開く」に。停止はミニプレイヤーのスワイプで行う
                     ToolbarItem(placement: .primaryAction) {
-                        if audioActive {
+                        // いま鳴っているのが「音読タブの音声」なら全画面を開いて続きから。
+                        // 何も鳴っていない or 暗記タブの音声が鳴っている時は、音読タブの音声を新しく再生する
+                        // (暗記→ミニプレイヤー→音読タブで再生ボタンを押したら音読が鳴るように)
+                        if audioActive, audioPlayer.source == .reading {
                             Button {
                                 if audioPlayer.isPaused { audioPlayer.resume() }
                                 showAudioPlayer = true
                             } label: {
-                                // 全画面プレイヤーを開いて再生する(退出ボタンに見えないよう再生マーク)
                                 Image(systemName: "play.circle.fill")
                                     .foregroundStyle(Color.accentColor)
                             }
-                        } else if isAnyPlaying {
-                            // TTSフォールバック再生中は従来どおり停止
-                            Button {
-                                speech.stop()
-                            } label: {
-                                Image(systemName: "stop.circle.fill")
-                                    .foregroundStyle(.red)
-                            }
                         } else {
-                            // 続きから再生(最後に聴いていた英文から)。
-                            // 「最初から再生」ボタンは使わないため廃止(2026-08-18の要望)
                             Button {
                                 startPlayback(fromBeginning: false)
                             } label: {
