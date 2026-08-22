@@ -1,24 +1,43 @@
 import AVFoundation
 import Foundation
+import Network
 
 /// Google 翻訳と同じ発音音声を鳴らす。
 /// 単語をGoogleのTTSエンドポイントでmp3として取得して再生する。
-/// (Google翻訳アプリの「発音」ボタンと同じ声。ネット不通などで失敗したら
-///  端末内蔵の読み上げ(SpeechSynthesisService)にフォールバックする)
+/// (Google翻訳アプリの「発音」ボタンと同じ声。オフラインや取得失敗時は
+///  端末内蔵の読み上げ(SpeechSynthesisService)に即フォールバックする。
+///  内蔵TTSはオフラインでも動くので、機内モードでも発音は使える)
 final class GoogleTTS: NSObject {
     static let shared = GoogleTTS()
 
     private var player: AVAudioPlayer?
-    /// 取得済みmp3のキャッシュ(同じ単語を何度も取りに行かない)
+    /// 取得済みmp3のキャッシュ(同じ単語を何度も取りに行かない。過去に聴いた語はオフラインでも鳴る)
     private var cache: [String: Data] = [:]
+    /// ネット接続の見張り(オフラインを即判定して待ち時間をなくす)
+    private let monitor = NWPathMonitor()
+    private var isOnline = true
+
+    private override init() {
+        super.init()
+        monitor.pathUpdateHandler = { [weak self] path in
+            self?.isOnline = (path.status == .satisfied)
+        }
+        monitor.start(queue: DispatchQueue(label: "googletts.net"))
+    }
 
     /// 英語(tl=en)として発音する。失敗時は onFallback を呼ぶ(内蔵TTS用)
     func speak(_ text: String, onFallback: @escaping () -> Void) {
         let word = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !word.isEmpty else { return }
 
+        // 取得済みならオフラインでもそのまま鳴らす
         if let data = cache[word] {
             play(data, fallbackText: word, onFallback: onFallback)
+            return
+        }
+        // オフラインならネットを待たずに即・内蔵音声(数秒固まるのを防ぐ)
+        if !isOnline {
+            onFallback()
             return
         }
         guard let encoded = word.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
