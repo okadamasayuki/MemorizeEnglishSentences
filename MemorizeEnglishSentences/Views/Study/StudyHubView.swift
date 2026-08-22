@@ -9,53 +9,21 @@ struct StudyHubView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = StudyStore.shared
     @State private var showPlayer = false
+    /// 0=覚える単語 / 1=チェックした英文(件数が増えても押しづらくならないようタブ分け)
+    @State private var tab = 0
 
     var body: some View {
         NavigationStack {
-            List {
-                // 覚える単語リスト
-                Section("覚える単語(\(store.words.count))") {
-                    if store.words.isEmpty {
-                        Text("下の「チェックした英文」で、意味と結びつかない単語をタップすると、ここに集まります。")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    } else {
-                        Button {
-                            showPlayer = true
-                        } label: {
-                            Label("単語リストを再生(シス単風)", systemImage: "play.circle.fill")
-                                .font(.body.weight(.semibold))
-                        }
-                        ForEach(store.words) { w in
-                            HStack {
-                                Text(w.word).font(.body.weight(.medium))
-                                Text(w.meaning).font(.subheadline).foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            .swipeActions {
-                                Button(role: .destructive) { store.removeWord(w.id) } label: {
-                                    Image(systemName: "trash")
-                                }
-                            }
-                        }
-                    }
+            VStack(spacing: 0) {
+                Picker("", selection: $tab) {
+                    Text("覚える単語(\(store.words.count))").tag(0)
+                    Text("チェックした英文(\(store.flagged.count))").tag(1)
                 }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
 
-                // チェックした英文(ここで単語を選ぶ)
-                Section("チェックした英文(\(store.flagged.count))") {
-                    if store.flagged.isEmpty {
-                        Text("音読プレイヤーでしおりボタンを押すと、その英文がここに入ります。")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    } else {
-                        ForEach(store.flagged) { s in
-                            FlaggedSentenceRow(sentence: s, context: context)
-                                .swipeActions {
-                                    Button(role: .destructive) { store.removeFlagged(s.id) } label: {
-                                        Image(systemName: "trash")
-                                    }
-                                }
-                        }
-                    }
-                }
+                if tab == 0 { wordsTab } else { flaggedTab }
             }
             .navigationTitle("単語学習")
             .navigationBarTitleDisplayMode(.inline)
@@ -68,6 +36,64 @@ struct StudyHubView: View {
                 StudyWordPlayerView(words: store.words)
             }
         }
+    }
+
+    // 覚える単語タブ(再生ボタンは常に上部で押しやすい位置)
+    private var wordsTab: some View {
+        VStack(spacing: 0) {
+            if !store.words.isEmpty {
+                Button {
+                    showPlayer = true
+                } label: {
+                    Label("単語リストを再生(シス単風)", systemImage: "play.circle.fill")
+                        .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
+            List {
+                if store.words.isEmpty {
+                    Text("「チェックした英文」タブで、意味と結びつかない単語をタップすると、ここに集まります。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                } else {
+                    ForEach(store.words) { w in
+                        HStack {
+                            Text(w.word).font(.body.weight(.medium))
+                            Text(w.meaning).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        .swipeActions {
+                            Button(role: .destructive) { store.removeWord(w.id) } label: {
+                                Image(systemName: "trash")
+                            }
+                        }
+                    }
+                }
+            }
+            .listStyle(.plain)
+        }
+    }
+
+    // チェックした英文タブ(ここで単語を選ぶ。複数選択可)
+    private var flaggedTab: some View {
+        List {
+            if store.flagged.isEmpty {
+                Text("音読プレイヤーで各文のしおりボタンを押すと、その英文がここに入ります。")
+                    .font(.footnote).foregroundStyle(.secondary)
+            } else {
+                ForEach(store.flagged) { s in
+                    FlaggedSentenceRow(sentence: s, context: context)
+                        .swipeActions {
+                            Button(role: .destructive) { store.removeFlagged(s.id) } label: {
+                                Image(systemName: "trash")
+                            }
+                        }
+                }
+            }
+        }
+        .listStyle(.plain)
     }
 }
 
