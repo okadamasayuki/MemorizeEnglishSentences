@@ -245,7 +245,8 @@ struct PassageListView: View {
                                 if audioPlayer.isPaused { audioPlayer.resume() }
                                 showAudioPlayer = true
                             } label: {
-                                Image(systemName: "rectangle.portrait.and.arrow.forward")
+                                // 全画面プレイヤーを開いて再生する(退出ボタンに見えないよう再生マーク)
+                                Image(systemName: "play.circle.fill")
                                     .foregroundStyle(Color.accentColor)
                             }
                         } else if isAnyPlaying {
