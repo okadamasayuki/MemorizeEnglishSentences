@@ -81,11 +81,11 @@ struct ImprovementListView: View {
             } message: {
                 Text(errorMessage ?? "")
             }
-            // 対応済みの一括全消去(確認してから)
-            .confirmationDialog("対応済みをすべて消去しますか?",
-                                isPresented: $showClearResultsConfirm, titleVisibility: .visible) {
-                Button("すべて消去", role: .destructive) { resultStore.removeAll() }
+            // 対応済みの一括全消去(確認してから)。alertにして常に画面中央に出す
+            // (confirmationDialogだと環境によって変な位置のポップオーバーになるため)
+            .alert("対応済みをすべて消去しますか?", isPresented: $showClearResultsConfirm) {
                 Button("キャンセル", role: .cancel) {}
+                Button("すべて消去", role: .destructive) { resultStore.removeAll() }
             } message: {
                 Text("対応済み\(resultStore.results.count)件をまとめて消します。")
             }
