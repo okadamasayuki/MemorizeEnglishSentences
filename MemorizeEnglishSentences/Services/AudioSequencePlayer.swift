@@ -213,10 +213,45 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         return ja.max(by: { rank($0) < rank($1) }) ?? AVSpeechSynthesisVoice(language: "ja-JP")
     }()
 
+    /// 他アプリの音(YouTube・PayPayの決済音など)で中断されたので自動再開の対象、という印。
+    /// 中断が終わったら、この印があるときだけ勝手に再開する
+    private var shouldResumeAfterInterruption = false
+
     private override init() {
         super.init()
         jaSynthesizer.delegate = self
         setupRemoteCommands()
+        // 他アプリが音を鳴らしたら止め、鳴り終わったら自動で再開する
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(handleInterruption(_:)),
+            name: AVAudioSession.interruptionNotification, object: nil)
+    }
+
+    /// 他アプリの音声割り込み(電話・YouTube・決済音など)への対応。
+    /// 始まったら一時停止し、終わって「再開してよい」と言われたら元の位置から再開する。
+    @objc private func handleInterruption(_ note: Notification) {
+        guard let info = note.userInfo,
+              let raw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+        switch type {
+        case .began:
+            // 音読が鳴っている最中だけ、あとで自動再開する印をつけて止める
+            if isPlayingSequence && !isPaused {
+                shouldResumeAfterInterruption = true
+                pause()
+            }
+        case .ended:
+            // 割り込みが終わった=他アプリの音(YouTubeショート/決済音など)が鳴り終わったとき。
+            // 自分が止められていた時だけ、セッションを立て直して元の位置から自動再開する。
+            // ※ .ended は相手の音が実際に止まってから来るので、ここで再開して大丈夫。
+            //   media系アプリは .shouldResume を付けないことがあるため、印があれば再開する。
+            guard shouldResumeAfterInterruption else { return }
+            shouldResumeAfterInterruption = false
+            try? AVAudioSession.sharedInstance().setActive(true, options: [])
+            resume()
+        @unknown default:
+            break
+        }
     }
 
     // MARK: - ロック画面の再生中表示(Now Playing)
