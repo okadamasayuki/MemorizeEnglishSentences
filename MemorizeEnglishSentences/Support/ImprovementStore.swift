@@ -30,7 +30,14 @@ final class ImprovementResultStore: ObservableObject {
             results = []
             return
         }
-        results = decoded.sorted { $0.completedAt > $1.completedAt }
+        // 対応済みは1日(24時間)で自動的に消す
+        let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
+        let fresh = decoded.filter { $0.completedAt > cutoff }
+        results = fresh.sorted { $0.completedAt > $1.completedAt }
+        // 期限切れを消したらファイルにも反映する
+        if fresh.count != decoded.count, let out = try? JSONEncoder().encode(results) {
+            try? out.write(to: fileURL, options: .atomic)
+        }
     }
 
     func remove(_ id: UUID) {

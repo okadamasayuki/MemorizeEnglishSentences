@@ -40,6 +40,8 @@ struct PassageListView: View {
     private var audioPlayer: AudioSequencePlayer { .shared }
     /// どちらかのプレイヤーが連続再生中か(ツールバーの表示切り替え用)
     @State private var isAnyPlaying = false
+    /// 教材音声プレイヤー(ミニプレイヤー)が動いているか
+    @State private var audioActive = false
     /// 連続再生プレイヤーの表示(TTS)
     @State private var showPlayer = false
     /// 教材音声プレイヤーの表示
@@ -234,12 +236,22 @@ struct PassageListView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
-                    // 連続再生: 最初から(⏮) / 続きから(▶ 音声再生用しおり)。再生中は停止ボタン
+                    // 連続再生: 続きから(▶ 音声再生用しおり)。
+                    // 教材音声プレイヤーが動いている間(ミニプレイヤー中)は、右上を
+                    // 停止ではなく「全画面プレイヤーを開く」に。停止はミニプレイヤーのスワイプで行う
                     ToolbarItem(placement: .primaryAction) {
-                        if isAnyPlaying {
+                        if audioActive {
+                            Button {
+                                if audioPlayer.isPaused { audioPlayer.resume() }
+                                showAudioPlayer = true
+                            } label: {
+                                Image(systemName: "rectangle.portrait.and.arrow.forward")
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                        } else if isAnyPlaying {
+                            // TTSフォールバック再生中は従来どおり停止
                             Button {
                                 speech.stop()
-                                audioPlayer.stop()
                             } label: {
                                 Image(systemName: "stop.circle.fill")
                                     .foregroundStyle(.red)
@@ -269,6 +281,7 @@ struct PassageListView: View {
                 .combineLatest(SpeechSynthesisService.shared.$isPlayingSequence)) { audio, tts in
                 let playing = audio || tts
                 if isAnyPlaying != playing { isAnyPlaying = playing }
+                if audioActive != audio { audioActive = audio }
             }
             .fullScreenCover(isPresented: $showPlayer) {
                 SentencePlayerView(items: playerItems)

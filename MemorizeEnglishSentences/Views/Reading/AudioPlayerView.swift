@@ -17,8 +17,6 @@ struct AudioPlayerView: View {
     @State private var counts: [Int] = []
     /// ブロック全体の繰り返し回数(全項目共通)
     @State private var blockCount: Int = 1
-    /// RWJ風の動画っぽい表示(プロトタイプ)を出しているか
-    @State private var showKinetic = false
     /// このブロックで報告済みの文番号(押した丸を赤く塗る目印)
     @State private var reportedHeads: Set<Int> = []
     @State private var reportedTails: Set<Int> = []
@@ -42,18 +40,6 @@ struct AudioPlayerView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                // RWJ風の動画っぽい表示(プロトタイプ)
-                Button {
-                    showKinetic = true
-                } label: {
-                    Image(systemName: "movieclapper")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(Capsule().fill(Color(.secondarySystemBackground)))
-                        .foregroundStyle(Color.primary)
-                }
-                .buttonStyle(.plain)
                 // 各英文の後にその文の和訳を読み上げるモード。
                 // 長押しで和訳の「声」を切り替えられる(比較用。記憶される)
                 Button {
@@ -209,10 +195,6 @@ struct AudioPlayerView: View {
             }
             .padding(.bottom, 6)
         }
-        // RWJ風の動画っぽい表示(プロトタイプ)。音声はそのまま流れ続ける
-        .fullScreenCover(isPresented: $showKinetic) {
-            RWJKineticView()
-        }
         // 再生が終わったら自動で閉じる
         .onChange(of: audio.isPlayingSequence) { _, playing in
             if !playing { dismiss() }
@@ -247,8 +229,9 @@ struct AudioPlayerView: View {
                     ForEach(Array(segments.enumerated()), id: \.offset) { i, seg in
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             VStack(alignment: .leading, spacing: 6) {
-                                // 英文と和訳の表示順(長押しで入れ替え。和訳→英文は和文英訳の練習用)
-                                if jaFirst, !seg.ja.isEmpty {
+                                // 英文と和訳の表示順(長押しで入れ替え。和訳→英文は和文英訳の練習用)。
+                                // 和訳トグルOFF時は和訳を表示も読み上げもしない
+                                if jaAfterSentence, jaFirst, !seg.ja.isEmpty {
                                     Text(seg.ja)
                                         .font(.subheadline)
                                         // 和訳の読み上げ中はその文の和訳をハイライトする
@@ -263,7 +246,7 @@ struct AudioPlayerView: View {
                                     .font(.title3.weight(.medium))
                                     .multilineTextAlignment(.leading)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                if !jaFirst, !seg.ja.isEmpty {
+                                if jaAfterSentence, !jaFirst, !seg.ja.isEmpty {
                                     Text(seg.ja)
                                         .font(.subheadline)
                                         // 和訳の読み上げ中はその文の和訳をハイライトする
@@ -330,7 +313,7 @@ struct AudioPlayerView: View {
                 }
                 .padding(.horizontal, 24)
             } else if let item {
-                if jaFirst, !item.japanese.isEmpty {
+                if jaAfterSentence, jaFirst, !item.japanese.isEmpty {
                     Text(item.japanese)
                         .font(.body)
                         .foregroundStyle(.secondary)
@@ -352,7 +335,7 @@ struct AudioPlayerView: View {
                         }
                     }
 
-                if !jaFirst, !item.japanese.isEmpty {
+                if jaAfterSentence, !jaFirst, !item.japanese.isEmpty {
                     Text(item.japanese)
                         .font(.body)
                         .foregroundStyle(.secondary)
