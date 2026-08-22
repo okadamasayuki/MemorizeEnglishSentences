@@ -86,12 +86,17 @@ final class ImprovementStore: ObservableObject {
         return dir
     }
 
-    func add(_ text: String, attachments: [String]? = nil) {
+    /// 追加した要望の id を返す(プレイヤーの報告ボタンを押し直して取り消せるように)。
+    /// 中身が空で何も追加しなかった場合は nil。
+    @discardableResult
+    func add(_ text: String, attachments: [String]? = nil) -> UUID? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty || !(attachments ?? []).isEmpty else { return }
-        items.insert(Improvement(text: trimmed.isEmpty ? "(添付のみ)" : trimmed,
-                                 attachments: attachments), at: 0)
+        guard !trimmed.isEmpty || !(attachments ?? []).isEmpty else { return nil }
+        let item = Improvement(text: trimmed.isEmpty ? "(添付のみ)" : trimmed,
+                               attachments: attachments)
+        items.insert(item, at: 0)
         save()
+        return item.id
     }
 
     func update(_ id: UUID, text: String) {

@@ -19,9 +19,10 @@ struct AudioPlayerView: View {
     @State private var counts: [Int] = []
     /// ブロック全体の繰り返し回数(全項目共通)
     @State private var blockCount: Int = 1
-    /// このブロックで報告済みの文番号(押した丸を赤く塗る目印)
-    @State private var reportedEn: Set<Int> = []
-    @State private var reportedJas: Set<Int> = []
+    /// このブロックで報告済みの文番号 → 改善タブに追加した項目のid。
+    /// 押し直すと、この id で改善タブの項目も一緒に取り消す(赤も消える)。
+    @State private var reportedEn: [Int: UUID] = [:]
+    @State private var reportedJas: [Int: UUID] = [:]
     /// ページめくりの選択状態。プレイヤー内部の更新を待つと
     /// スワイプが一瞬引き戻される変なモーションになるため、ローカルで即時に持つ
     @State private var pageSelection = 0
@@ -291,15 +292,26 @@ struct AudioPlayerView: View {
                                 .buttonStyle(.plain)
                                 if isCurrent {
                                     // 英=英文の区切りが変(文頭/文末のどちらか)。押すと赤くなり改善タブへ自動追加。
-                                    // 修正側で文頭・文末の両方を解析してズレている側を直すので、統合しても精度は落ちない
-                                    reportLabeledDot("英", reported: reportedEn.contains(i)) {
-                                        reportedEn.insert(i)
-                                        reportSegmentIssue(seg: seg, index: i)
+                                    // 修正側で文頭・文末の両方を解析してズレている側を直すので、統合しても精度は落ちない。
+                                    // もう一度押すと取り消し(赤も改善タブの項目も消える)。
+                                    reportLabeledDot("英", reported: reportedEn[i] != nil) {
+                                        if let id = reportedEn[i] {
+                                            ImprovementStore.shared.remove(id)
+                                            reportedEn[i] = nil
+                                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                        } else {
+                                            reportedEn[i] = reportSegmentIssue(seg: seg, index: i)
+                                        }
                                     }
-                                    // 日=和訳の読み方(日本語)がおかしい
-                                    reportLabeledDot("日", reported: reportedJas.contains(i)) {
-                                        reportedJas.insert(i)
-                                        reportJaReadingIssue(seg: seg, index: i)
+                                    // 日=和訳の読み方(日本語)がおかしい。もう一度押すと取り消し。
+                                    reportLabeledDot("日", reported: reportedJas[i] != nil) {
+                                        if let id = reportedJas[i] {
+                                            ImprovementStore.shared.remove(id)
+                                            reportedJas[i] = nil
+                                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                        } else {
+                                            reportedJas[i] = reportJaReadingIssue(seg: seg, index: i)
+                                        }
                                     }
                                 }
                             }
@@ -386,7 +398,7 @@ struct AudioPlayerView: View {
         audio.updateGlobalBlockRepeat(n)
     }
 
-    /// 「切れ目が変」のワンタップ報告ボタン(頭/末のラベル入り。押すと赤くなる)
+    /// 報告のワンタップボタン(英/日のラベル入り)。押すと赤くなり、もう一度押すと取り消せる。
     private func reportLabeledDot(_ label: String, reported: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
@@ -398,11 +410,11 @@ struct AudioPlayerView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .disabled(reported)
     }
 
-    /// 和訳の読み方がおかしい文の報告を改善タブの一覧へ書き込む(あとでスワイプしてMacへ送る)
-    private func reportJaReadingIssue(seg: AudioSegment, index: Int) {
+    /// 和訳の読み方がおかしい文の報告を改善タブの一覧へ書き込む(あとでスワイプしてMacへ送る)。
+    /// 押し直しで取り消せるよう、追加した要望の id を返す。
+    private func reportJaReadingIssue(seg: AudioSegment, index: Int) -> UUID? {
         let block = audio.currentItem?.english ?? ""
         let report = """
         【和訳の読み方修正】読み方がおかしい
@@ -410,21 +422,24 @@ struct AudioPlayerView: View {
         英文: \(seg.en)
         (項目\((audio.sequenceIndex ?? 0) + 1)・文\(index + 1)、ブロック先頭: \(String(block.prefix(60)))…)
         """
-        ImprovementStore.shared.add(report)
+        let id = ImprovementStore.shared.add(report)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+        return id
     }
 
     /// 英文の区切りが変な文の報告を改善タブの一覧へ書き込む(あとでスワイプしてMacへ送る)。
     /// 文頭/文末のどちらが変かは指定せず、修正側で両方を解析してズレた側を直す。
-    private func reportSegmentIssue(seg: AudioSegment, index: Int) {
+    /// 押し直しで取り消せるよう、追加した要望の id を返す。
+    private func reportSegmentIssue(seg: AudioSegment, index: Int) -> UUID? {
         let block = audio.currentItem?.english ?? ""
         let report = """
         【音声の区切り修正】英文の区切りが変
         文: \(seg.en)
         (項目\((audio.sequenceIndex ?? 0) + 1)・文\(index + 1)、ブロック先頭: \(String(block.prefix(60)))…)
         """
-        ImprovementStore.shared.add(report)
+        let id = ImprovementStore.shared.add(report)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+        return id
     }
 
     /// 現在ブロックの保存済み回数設定を読み込む

@@ -9,21 +9,21 @@ struct StudyHubView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = StudyStore.shared
     @State private var showPlayer = false
-    /// 0=覚える単語 / 1=チェックした英文(件数が増えても押しづらくならないようタブ分け)
+    /// 0=チェックした英文(左) / 1=覚える単語(右)。件数が増えても押しづらくならないようタブ分け
     @State private var tab = 0
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 Picker("", selection: $tab) {
-                    Text("覚える単語(\(store.words.count))").tag(0)
-                    Text("チェックした英文(\(store.flagged.count))").tag(1)
+                    Text("チェックした英文").tag(0)
+                    Text("覚える単語").tag(1)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
 
-                if tab == 0 { wordsTab } else { flaggedTab }
+                if tab == 0 { flaggedTab } else { wordsTab }
             }
             .navigationTitle("単語学習")
             .navigationBarTitleDisplayMode(.inline)
