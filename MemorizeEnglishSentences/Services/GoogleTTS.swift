@@ -58,7 +58,7 @@ final class GoogleTTS: NSObject {
     /// posJa(名詞/動詞など)が分かればヘテロニムを品詞に合わせて発音する(英語のみ)。
     /// 失敗時は onFallback を呼ぶ(内蔵TTS用)。onFinished は再生が終わったら一度だけ呼ぶ
     /// (シス単風の 英→和→英 の連鎖に使う。フォールバック時も鳴り終わり相当で呼ぶ)。
-    func speak(_ text: String, lang: String = "en", posJa: String? = nil,
+    func speak(_ text: String, lang: String = "en", posJa: String? = nil, rate: Float = 1.0,
                onFallback: @escaping () -> Void, onFinished: (() -> Void)? = nil) {
         var word = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !word.isEmpty else { onFinished?(); return }
@@ -74,26 +74,26 @@ final class GoogleTTS: NSObject {
 
         // 取得済み(メモリ)ならそのまま鳴らす
         if let data = cache[ckey] {
-            play(data, fallbackText: word, onFallback: onFallback, onFinished: onFinished)
+            play(data, fallbackText: word, rate: rate, onFallback: onFallback, onFinished: onFinished)
             return
         }
         // 事前ダウンロード済み/一度取得済み(ディスク)ならオフラインでもGoogle音声で鳴らす
         let disk = diskURL(forKey: ckey)
         if let data = try? Data(contentsOf: disk), data.count > 200 {
             cache[ckey] = data
-            play(data, fallbackText: word, onFallback: onFallback, onFinished: onFinished)
+            play(data, fallbackText: word, rate: rate, onFallback: onFallback, onFinished: onFinished)
             return
         }
         // オフラインでディスクにも無ければ、待たずに即・内蔵音声
         if !isOnline {
             onFallback()
-            finishAfterFallback(word, onFinished)
+            finishAfterFallback(word, rate: rate, onFinished)
             return
         }
         guard let encoded = word.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "https://translate.google.com/translate_tts?ie=UTF-8&tl=\(lang)&client=tw-ob&q=\(encoded)") else {
             onFallback()
-            finishAfterFallback(word, onFinished)
+            finishAfterFallback(word, rate: rate, onFinished)
             return
         }
         var request = URLRequest(url: url, timeoutInterval: 6)
@@ -103,14 +103,14 @@ final class GoogleTTS: NSObject {
         URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
             let ok = (response as? HTTPURLResponse)?.statusCode == 200
             guard let self, ok, let data, data.count > 200 else {
-                DispatchQueue.main.async { onFallback(); self?.finishAfterFallback(word, onFinished) }
+                DispatchQueue.main.async { onFallback(); self?.finishAfterFallback(word, rate: rate, onFinished) }
                 return
             }
             self.cache[ckey] = data
             // 次回・オフラインでも鳴らせるようディスクにも残す(日本語の意味などの再取得を防ぐ)
             try? FileManager.default.createDirectory(at: Self.dir, withIntermediateDirectories: true)
             try? data.write(to: disk, options: .atomic)
-            DispatchQueue.main.async { self.play(data, fallbackText: word, onFallback: onFallback, onFinished: onFinished) }
+            DispatchQueue.main.async { self.play(data, fallbackText: word, rate: rate, onFallback: onFallback, onFinished: onFinished) }
         }.resume()
     }
 
@@ -123,14 +123,14 @@ final class GoogleTTS: NSObject {
     }
 
     /// 内蔵音声にフォールバックしたときの、鳴り終わり相当の見積り時間で onFinished を呼ぶ
-    private func finishAfterFallback(_ word: String, _ onFinished: (() -> Void)?) {
+    private func finishAfterFallback(_ word: String, rate: Float = 1.0, _ onFinished: (() -> Void)?) {
         guard let onFinished else { return }
-        // 語長からおおよその読み上げ時間を見積る(短くても最低0.6秒)
-        let secs = max(0.6, Double(word.count) * 0.09 + 0.35)
+        // 語長からおおよその読み上げ時間を見積る(短くても最低0.6秒)。倍速時は短く
+        let secs = max(0.4, (Double(word.count) * 0.09 + 0.35) / Double(max(0.5, rate)))
         DispatchQueue.main.asyncAfter(deadline: .now() + secs) { onFinished() }
     }
 
-    private func play(_ data: Data, fallbackText: String,
+    private func play(_ data: Data, fallbackText: String, rate: Float = 1.0,
                       onFallback: @escaping () -> Void, onFinished: (() -> Void)? = nil) {
         do {
             // 再生専用にセッションを整える(録音中は触らない)
@@ -141,6 +141,11 @@ final class GoogleTTS: NSObject {
             let p = try AVAudioPlayer(data: data)
             self.onFinished = onFinished
             p.delegate = self
+            // 倍速再生(音程は保つ)。1.0以外のときだけ有効化
+            if rate != 1.0 {
+                p.enableRate = true
+                p.rate = rate
+            }
             player = p
             p.play()
         } catch {

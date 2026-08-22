@@ -17,17 +17,24 @@ final class StudyWordPlayer: NSObject, ObservableObject {
     @Published var sessionActive = false
 
     private(set) var words: [StudyStore.StudyWord] = []
-    /// 英語②(2回目)を読み終えてから次の語へ進むまでの間(秒)。速度切り替えで変える。
-    /// 本家シス単の実測(単語間 約1.2秒)を「普通」に採用
-    var gap: Double = 1.2
+    /// 再生倍率(1.0=標準。0.75=ゆっくり、2.0/3.0=速い)。音声の再生速度と間隔の両方に効く
+    var speed: Double = 1.0
     /// 一番下まで来たら先頭に戻って繰り返すか(リピート)
     var loop: Bool = false
 
-    // 本家シス単の音声を実測して合わせた、語の中の間(秒)
+    // 本家シス単の音声を実測して合わせた、標準(1倍)のときの間(秒)。倍率で割って使う
     /// 英語① → 日本語の意味 の間
-    private let gapEnToJa = 0.65
+    private let baseGapEnToJa = 0.65
     /// 日本語の意味 → 英語②(もう一度) の間
-    private let gapJaToEn = 0.55
+    private let baseGapJaToEn = 0.55
+    /// 英語②(2回目) → 次の単語 の間(実測 約1.2秒)
+    private let baseGapBetween = 1.2
+
+    // 倍率を反映した実際の間・再生レート
+    private var gapEnToJa: Double { baseGapEnToJa / speed }
+    private var gapJaToEn: Double { baseGapJaToEn / speed }
+    private var gapBetween: Double { baseGapBetween / speed }
+    private var playRate: Float { Float(speed) }
 
     private let jaSynth = AVSpeechSynthesizer()
     /// 進行中の連鎖の世代。曲送り/一時停止のたびに増やして古い連鎖を捨てる
@@ -105,7 +112,7 @@ final class StudyWordPlayer: NSObject, ObservableObject {
         let my = token
         let w = words[index]
         // ① 英語
-        GoogleTTS.shared.speak(w.word,
+        GoogleTTS.shared.speak(w.word, rate: playRate,
                                onFallback: { SpeechSynthesisService.shared.speak(w.word) },
                                onFinished: { [weak self] in self?.step2Ja(my, w) })
     }
@@ -118,7 +125,7 @@ final class StudyWordPlayer: NSObject, ObservableObject {
             guard let self, my == self.token else { return }
             // ② 日本語の意味 → Googleの音声(翻訳と同じ声)で読む。取れなければ内蔵読み上げ。
             //    読み終わったら英語2回目へ
-            GoogleTTS.shared.speak(meaning, lang: "ja",
+            GoogleTTS.shared.speak(meaning, lang: "ja", rate: self.playRate,
                                    onFallback: { self.speakJaFallback(meaning) },
                                    onFinished: { [weak self] in self?.step3En(my, w) })
         }
@@ -137,7 +144,7 @@ final class StudyWordPlayer: NSObject, ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + gapJaToEn) { [weak self] in
             guard let self, my == self.token else { return }
             // ③ 英語(もう一度) → 鳴り終わったら次の語へ
-            GoogleTTS.shared.speak(w.word,
+            GoogleTTS.shared.speak(w.word, rate: self.playRate,
                                    onFallback: { SpeechSynthesisService.shared.speak(w.word) },
                                    onFinished: { [weak self] in self?.scheduleAdvance(my) })
         }
@@ -158,7 +165,7 @@ final class StudyWordPlayer: NSObject, ObservableObject {
             }
         }
         advanceWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + gap, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + gapBetween, execute: work)
     }
 }
 

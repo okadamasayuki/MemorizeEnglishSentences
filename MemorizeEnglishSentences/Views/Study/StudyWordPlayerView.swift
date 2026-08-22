@@ -8,14 +8,13 @@ struct StudyWordPlayerView: View {
     @Environment(\.dismiss) private var dismiss
 
     @ObservedObject private var player = StudyWordPlayer.shared
-    /// 1語を読み終えてから次へ進むまでの間(秒)。速い/普通/ゆっくり。アプリを閉じても記憶。
-    /// 「普通」は本家シス単の実測(単語間 約1.2秒)に合わせている
-    @AppStorage("studyWordGap") private var gap = 1.2
+    /// 再生倍率(1.0=標準)。音声の速さと間隔の両方に効く。アプリを閉じても記憶。
+    @AppStorage("studyWordSpeed") private var speed = 1.0
     /// 一番下まで来たら先頭に戻って繰り返す(リピート)。アプリを閉じても記憶
     @AppStorage("studyWordLoop") private var loop = false
 
-    // 英→和→英の3回読むので、ここでは語と語の間だけを持たせる(語の中の間はエンジン側で固定)
-    private let gaps: [(String, Double)] = [("速い", 0.7), ("普通", 1.2), ("ゆっくり", 2.2)]
+    // 倍率(左=ゆっくり0.75倍 → 右=速い3倍)。標準1倍が本家シス単の実測テンポ
+    private let speeds: [Double] = [0.75, 1.0, 1.5, 2.0, 3.0]
 
     var body: some View {
         VStack(spacing: 16) {
@@ -52,33 +51,28 @@ struct StudyWordPlayerView: View {
                 }
             }
 
-            // 速度(語間の休み)
-            HStack(spacing: 8) {
-                ForEach(gaps, id: \.1) { label, value in
+            // 再生倍率(左=ゆっくり0.75倍 → 右=速い3倍)
+            HStack(spacing: 6) {
+                ForEach(speeds, id: \.self) { value in
                     Button {
-                        gap = value
-                        player.gap = value
+                        speed = value
+                        player.speed = value
                     } label: {
-                        Text(label)
+                        Text(speedLabel(value))
                             .font(.footnote.weight(.semibold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
                             .background(RoundedRectangle(cornerRadius: 8)
-                                .fill(gap == value ? Color.accentColor : Color(.secondarySystemBackground)))
-                            .foregroundStyle(gap == value ? .white : .primary)
+                                .fill(speed == value ? Color.accentColor : Color(.secondarySystemBackground)))
+                            .foregroundStyle(speed == value ? .white : .primary)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
 
-            // 先頭へ / 前 / 再生・一時停止 / 次 / リピート
-            HStack(spacing: 18) {
-                // 一番上(先頭)に戻る
-                Button { player.jump(to: 0) } label: {
-                    Image(systemName: "arrow.up.to.line").font(.title3)
-                }
-                .buttonStyle(.bordered)
+            // 前 / 再生・一時停止 / 次 / リピート
+            HStack(spacing: 20) {
                 Button { player.prev() } label: {
                     Image(systemName: "backward.fill").font(.title2)
                 }
@@ -107,7 +101,7 @@ struct StudyWordPlayerView: View {
             .padding(.bottom, 20)
         }
         .onAppear {
-            player.gap = gap
+            player.speed = speed
             player.loop = loop
             // ミニプレイヤーから開き直した時(再生継続中)は続きから。
             // 初めて開いた時だけ、単語をセットして最初から再生する
@@ -118,6 +112,11 @@ struct StudyWordPlayerView: View {
         }
         // 画面を閉じても再生は止めない(下スワイプでミニプレイヤーに残す)。
         // 完全に止めるのは×ボタンかミニプレイヤーのスワイプで
+    }
+
+    /// 倍率の表示("0.75倍" "1倍" "1.5倍" "2倍" "3倍")
+    private func speedLabel(_ v: Double) -> String {
+        String(format: "%g倍", v)
     }
 
     @ViewBuilder
