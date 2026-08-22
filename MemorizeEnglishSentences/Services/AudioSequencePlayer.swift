@@ -588,6 +588,11 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
                 if boundary != .greatestFiniteMagnitude {
                     end = min(end, boundary)
                 }
+                // 最後の文は、ファイル末尾の余分な無音まで流さず、単語終わり+わずかな余韻で切る
+                // (「最後だけ無音があって違和感」の解消)
+                if boundary == .greatestFiniteMagnitude, let lastWordEnd {
+                    end = min(end, lastWordEnd + 0.30)
+                }
                 return end
             }
             segReplayStarts = segs.map { max(0, $0.start - 0.05) }
@@ -678,7 +683,6 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
             return
         }
         let dur = player.duration
-        let lastScheduled = (0..<segCounts.count).last { segCounts[$0] > 0 }
         var cum = 0.0
         let jaOn = jaAfterSentence
         let jaLeadMode = jaOrderFirst
@@ -692,10 +696,9 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
                     cum += jaDur
                 }
                 for r in 0..<segCounts[i] {
-                    // 各周の最後の窓はファイル末尾まで(自然な間を保つ)
-                    let isPassLast = (i == lastScheduled && r == segCounts[i] - 1)
+                    // 文の終わりは常に「話し終わり(+余韻)」で切る。末尾の余分な無音は流さない
                     let start = segReplayStarts.indices.contains(i) ? segReplayStarts[i] : 0
-                    var end = isPassLast ? dur : min(segSpeechEnds.indices.contains(i) ? segSpeechEnds[i] : dur, dur)
+                    var end = min(segSpeechEnds.indices.contains(i) ? segSpeechEnds[i] : dur, dur)
                     if end < start { end = start }
                     windows.append(PlayWindow(pass: pass, seg: i, rep: r, start: start, end: end, cumBefore: cum))
                     cum += end - start
@@ -917,12 +920,17 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         }
         guard let player else { return }
         // 文の終わりは常に「話し終わり(+余韻)」で切り、文間の息継ぎ・間は再生しない。
-        // ただしブロック最終文の最後の1回だけはファイル末尾まで自然に流す
-        // (ブロック間の間はそのまま保つ)。
+        // ブロック最終文も、末尾の余分な無音は流さず話し終わり(+余韻)で切る。
         let isFinalRep = curSeg >= segCounts.count || curRep + 1 >= segCounts[curSeg]
-        let endPoint: Double? = (isFinalRep && windowEnd(curSeg) == nil)
-            ? nil
-            : (segSpeechEnds.indices.contains(curSeg) ? segSpeechEnds[curSeg] : windowEnd(curSeg))
+        let speechEnd = segSpeechEnds.indices.contains(curSeg) ? segSpeechEnds[curSeg] : nil
+        let endPoint: Double?
+        if let speechEnd, speechEnd.isFinite {
+            endPoint = speechEnd
+        } else if isFinalRep && windowEnd(curSeg) == nil {
+            endPoint = nil  // 話し終わりが取れない最終文だけは従来どおりファイル末尾まで
+        } else {
+            endPoint = windowEnd(curSeg)
+        }
         if let end = endPoint, player.currentTime >= end - 0.02 {
             advanceAfterSegment()
             return
