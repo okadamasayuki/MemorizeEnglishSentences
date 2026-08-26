@@ -383,6 +383,35 @@ enum SampleData {
         UserDefaults.standard.set(true, forKey: key)
     }
 
+    /// 暗記タブの並び順を、タイトルの番号(recall-001 …)どおりに整える。
+    /// 取り込んだ文章は sortIndex が既定の0のままで、並びが createdAt 頼りになり崩れやすい。
+    /// sortIndex を番号で埋めて確定させる。手動で並べ替え済み(0以外が混ざる)なら尊重して触らない。
+    /// 毎回チェックするので、再取り込み等で0に戻っても自動で並びを直せる(自己修復)。
+    static func assignRecallSortIndexIfNeeded(context: ModelContext) {
+        let descriptor = FetchDescriptor<Passage>(
+            predicate: #Predicate { $0.purposeRaw == "recall" }
+        )
+        guard let passages = try? context.fetch(descriptor), !passages.isEmpty else { return }
+        // 手動で並べ替えた形跡(0以外)があれば、その並びを尊重して何もしない
+        guard passages.allSatisfy({ $0.sortIndex == 0 }) else { return }
+        var changed = false
+        for p in passages {
+            guard let n = firstNumber(in: p.title) else { continue }
+            if p.sortIndex != n { p.sortIndex = n; changed = true }
+        }
+        if changed { try? context.save() }
+    }
+
+    /// 文字列の中の最初の整数を取り出す(例: "recall-012 …" → 12)。無ければ nil
+    private static func firstNumber(in text: String) -> Int? {
+        var digits = ""
+        for ch in text {
+            if ch.isNumber { digits.append(ch) }
+            else if !digits.isEmpty { break }
+        }
+        return Int(digits)
+    }
+
     /// 履歴タブを廃止したので、調べた単語の履歴(LookedUpWord)を一度だけ全削除する。
     /// 他タブとはリレーションがない独立データなので、他タブには影響しない。
     static func removeLookupHistoryIfNeeded(context: ModelContext) {

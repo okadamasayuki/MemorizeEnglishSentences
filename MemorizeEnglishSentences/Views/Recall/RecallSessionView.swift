@@ -29,6 +29,10 @@ struct RecallSessionView: View {
     @State private var pages: [Passage] = []
     /// いま表示しているページの文章 ID
     @State private var selectedID: PersistentIdentifier?
+    /// いま表示しているページの番号(音読プレイヤーと同じ、指に追従するページング用)
+    @State private var pageIndex: Int = 0
+    /// ページングスクロールの現在位置(落ち着くと更新される)
+    @State private var scrollID: Int?
 
     @State private var speech = SpeechRecognitionService()
     @State private var showAnswer = false
@@ -59,25 +63,42 @@ struct RecallSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // ページをめくるように指に追従してスワイプで前後の文章へ移動できる。
-            // TabView(.page) は全ページを一度に作ってしまうため、
+            // 音読タブのプレイヤーと同じ、指に最後まで追従するページングスクロールで
+            // 前後の文章へ移動する(TabView(.page)の「半分で確定・引き戻し」を避ける)。
             // 表示中と左右1ページ以外は空にして軽くする(音声入力中の再描画で顕著に効く)
-            TabView(selection: $selectedID) {
-                let currentIndex = pages.firstIndex { $0.persistentModelID == selectedID } ?? 0
-                ForEach(Array(pages.enumerated()), id: \.element.persistentModelID) { index, page in
-                    Group {
-                        if abs(index - currentIndex) <= 1 {
-                            pageView(page)
-                        } else {
-                            Color.clear
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 0) {
+                    ForEach(pages.indices, id: \.self) { index in
+                        Group {
+                            if abs(index - pageIndex) <= 1 {
+                                pageView(pages[index])
+                            } else {
+                                Color.clear
+                            }
                         }
+                        .containerRelativeFrame(.horizontal)
                     }
-                    .tag(Optional(page.persistentModelID))
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollIndicators(.hidden)
+            .scrollPosition(id: $scrollID)
+            // 指が触れている間・慣性中は切り替えず、完全に止まってからその文章へ移す
+            .onScrollPhaseChange { _, newPhase in
+                guard newPhase == .idle, let id = scrollID, pages.indices.contains(id) else { return }
+                if id != pageIndex {
+                    pageIndex = id
+                    selectedID = pages[id].persistentModelID
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
             .onChange(of: selectedID) {
-                // ページが替わったら回答・答え・ヒントをリセットして認識バイアスを合わせ直す
+                // ページが替わったら回答・答え・ヒントをリセットして認識バイアスを合わせ直す。
+                // 外から selectedID が変わった場合はスクロール位置も追従させる
+                if let idx = pages.firstIndex(where: { $0.persistentModelID == selectedID }), idx != pageIndex {
+                    pageIndex = idx
+                    withAnimation(.easeInOut(duration: 0.25)) { scrollID = idx }
+                }
                 speech.stop()
                 speech.reset()
                 showAnswer = false
@@ -218,6 +239,9 @@ struct RecallSessionView: View {
                 }
                 pages = list.isEmpty ? [initialPassage] : list
                 selectedID = initialPassage.persistentModelID
+                let idx = pages.firstIndex { $0.persistentModelID == initialPassage.persistentModelID } ?? 0
+                pageIndex = idx
+                scrollID = idx
             }
             configureSpeech()
         }

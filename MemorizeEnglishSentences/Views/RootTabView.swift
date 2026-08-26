@@ -27,6 +27,8 @@ struct RootTabView: View {
             SampleData.applyDefaultStatusIfNeeded(context: context)
             SampleData.splitReadingAndRecallIfNeeded(context: context)
             SampleData.removeReadingPassagesIfNeeded(context: context)
+            // 暗記タブの並びを番号どおりに整える(崩れていれば自己修復)
+            SampleData.assignRecallSortIndexIfNeeded(context: context)
             SampleData.seedBookPhotosIfNeeded(context: context)
             SampleData.cleanupWordCacheIfNeeded(context: context)
             // 単語タブは廃止。単語データを一度だけ削除する(他タブには影響なし)
