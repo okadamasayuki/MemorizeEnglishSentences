@@ -27,6 +27,8 @@ struct AudioPlayerView: View {
     /// 押し直すと、この id で改善タブの項目も一緒に取り消す(赤も消える)。
     @State private var reportedEn: [Int: UUID] = [:]
     @State private var reportedJas: [Int: UUID] = [:]
+    /// 文頭に息を吸う音などが入る、の報告済み文番号 → 改善タブのid
+    @State private var reportedBreath: [Int: UUID] = [:]
     /// ページめくりの選択状態。プレイヤー内部の更新を待つと
     /// スワイプが一瞬引き戻される変なモーションになるため、ローカルで即時に持つ
     @State private var pageSelection = 0
@@ -34,7 +36,7 @@ struct AudioPlayerView: View {
     @State private var scrollID: Int?
 
     // 教材音声はレート変換の音質を考慮して 0.5〜2x
-    private let speedOptions: [Double] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+    private let speedOptions: [Double] = [1.0, 1.25, 1.5, 2.0, 2.5, 3.0]
 
     var body: some View {
         VStack(spacing: 12) {
@@ -144,12 +146,6 @@ struct AudioPlayerView: View {
                 withAnimation(.easeInOut(duration: 0.25)) { scrollID = idx }
             }
 
-            // 再生時間スライダー(×2などの回数設定を織り込んだ合計時間)
-            AudioProgressSlider(progress: audio.progress) { value in
-                audio.seekVirtual(to: value)
-            }
-            .padding(.horizontal, 24)
-
             // 速度ボタン
             VStack(spacing: 10) {
                 HStack(spacing: 6) {
@@ -221,6 +217,7 @@ struct AudioPlayerView: View {
             syncCounts()
             reportedEn.removeAll()
             reportedJas.removeAll()
+            reportedBreath.removeAll()
         }
     }
 
@@ -330,6 +327,16 @@ struct AudioPlayerView: View {
                                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                         } else {
                                             reportedJas[i] = reportJaReadingIssue(seg: seg, index: i)
+                                        }
+                                    }
+                                    // 息=文頭に息を吸う音など余分な音が入る(区切りを少し後ろへ)。もう一度で取消
+                                    reportLabeledDot("息", reported: reportedBreath[i] != nil) {
+                                        if let id = reportedBreath[i] {
+                                            ImprovementStore.shared.remove(id)
+                                            reportedBreath[i] = nil
+                                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                        } else {
+                                            reportedBreath[i] = reportBreathIssue(seg: seg, index: i)
                                         }
                                     }
                                 }
@@ -494,6 +501,19 @@ struct AudioPlayerView: View {
         let block = audio.currentItem?.english ?? ""
         let report = """
         【音声の区切り修正】英文の区切りが変
+        文: \(seg.en)
+        (項目\((audio.sequenceIndex ?? 0) + 1)・文\(index + 1)、ブロック先頭: \(String(block.prefix(60)))…)
+        """
+        let id = ImprovementStore.shared.add(report)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        return id
+    }
+
+    /// 文頭に息を吸う音など余分な音が入る文の報告(区切りを少し後ろへ寄せる用)。押し直しで取消。
+    private func reportBreathIssue(seg: AudioSegment, index: Int) -> UUID? {
+        let block = audio.currentItem?.english ?? ""
+        let report = """
+        【音声の区切り修正】文頭に息を吸う音が入る(区切りを少し後ろへ)
         文: \(seg.en)
         (項目\((audio.sequenceIndex ?? 0) + 1)・文\(index + 1)、ブロック先頭: \(String(block.prefix(60)))…)
         """
