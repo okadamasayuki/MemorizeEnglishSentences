@@ -41,19 +41,27 @@ enum BlockAudioStore {
         return String(digest.map { String(format: "%02x", $0) }.joined().prefix(16))
     }
 
+    /// 音声ファイル。Kokoro等の .m4a を優先し、無ければ従来の教材 .mp3。
+    private static func audioURL(_ k: String) -> URL? {
+        for ext in ["m4a", "mp3"] {
+            let u = dir.appendingPathComponent("\(k).\(ext)")
+            if FileManager.default.fileExists(atPath: u.path) { return u }
+        }
+        return nil
+    }
+
     /// このブロックに教材音声があるか
     static func hasAudio(forBlockText text: String) -> Bool {
         let k = key(forBlockText: text)
         guard manifest()[k] != nil else { return false }
-        return FileManager.default.fileExists(atPath: dir.appendingPathComponent("\(k).mp3").path)
+        return audioURL(k) != nil
     }
 
     /// このブロックの音声ファイルURLと単語タイミング・無音区間を返す
     static func item(forBlockText text: String) -> (url: URL, words: [AudioWordTiming], silences: [(start: Double, end: Double)])? {
         let k = key(forBlockText: text)
         guard let entry = manifest()[k] else { return nil }
-        let url = dir.appendingPathComponent("\(k).mp3")
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard let url = audioURL(k) else { return nil }
         let words: [AudioWordTiming] = entry.w.compactMap { row in
             guard row.count == 4 else { return nil }
             return AudioWordTiming(
