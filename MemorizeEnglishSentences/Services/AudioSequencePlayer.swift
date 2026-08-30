@@ -557,9 +557,10 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         let item = items[currentIndex]
         blockRepeatCount = max(1, item.blockRepeat)
         if let segs = item.segments, !segs.isEmpty, item.repeatCounts.count == segs.count {
-            // 各文は最初の単語の少し手前(0.05秒)から。先頭の文も0秒からにせず、
-            // ブロック冒頭の息継ぎ・無音を飛ばして最初の単語の直前から始める(文頭の息対策)
-            segStarts = segs.map { max(0, $0.start - 0.05) }
+            // 各文は最初の単語のごく直前(0.02秒)から。先頭の文も0秒からにせず、
+            // 文頭の息継ぎ・無音を極力入れないように単語の直前から始める(文頭の息対策)。
+            // リードを0.05→0.02に詰めて、単語の前の息の音が入らないようにする
+            segStarts = segs.map { max(0, $0.start - 0.02) }
             segCounts = item.repeatCounts
             // 「話し終わり」= 次の文の手前にある無音区間の開始+余韻。
             // ただし無音検出が文中の弱い語(文末の小さな声など)を「終わり」と誤認して
@@ -598,7 +599,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
                 }
                 return end
             }
-            segReplayStarts = segs.map { max(0, $0.start - 0.05) }
+            segReplayStarts = segs.map { max(0, $0.start - 0.02) }
         } else {
             // 文情報が無いブロックは従来どおり全体を1回
             segStarts = [0]
