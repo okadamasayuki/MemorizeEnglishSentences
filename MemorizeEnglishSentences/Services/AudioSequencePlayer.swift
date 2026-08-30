@@ -557,8 +557,9 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         let item = items[currentIndex]
         blockRepeatCount = max(1, item.blockRepeat)
         if let segs = item.segments, !segs.isEmpty, item.repeatCounts.count == segs.count {
-            // 先頭の文はブロック冒頭(0秒)から。2文目以降は最初の単語の少し手前から
-            segStarts = segs.enumerated().map { i, s in i == 0 ? 0 : max(0, s.start - 0.05) }
+            // 各文は最初の単語の少し手前(0.05秒)から。先頭の文も0秒からにせず、
+            // ブロック冒頭の息継ぎ・無音を飛ばして最初の単語の直前から始める(文頭の息対策)
+            segStarts = segs.map { max(0, $0.start - 0.05) }
             segCounts = item.repeatCounts
             // 「話し終わり」= 次の文の手前にある無音区間の開始+余韻。
             // ただし無音検出が文中の弱い語(文末の小さな声など)を「終わり」と誤認して
@@ -581,12 +582,14 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
                     // 無音が見つからない場合: 次の文の0.35秒前で切る(最後の文は末尾まで)
                     end = boundary == .greatestFiniteMagnitude ? boundary : max(segStart, boundary - 0.35)
                 }
-                if let lastWordEnd, end < lastWordEnd + 0.22 {
-                    end = lastWordEnd + 0.22
+                if let lastWordEnd, end < lastWordEnd + 0.18 {
+                    end = lastWordEnd + 0.18
                 }
-                // 次の文の頭にはかぶせない
+                // 次の文の頭(とその手前の息継ぎ)にかぶせない:
+                // 次の文の最初の単語の0.10秒手前までで切る。ただし最終単語+0.05秒より
+                // 手前では切らない(尻切れ防止)。これで文末に次の文の息が漏れない
                 if boundary != .greatestFiniteMagnitude {
-                    end = min(end, boundary)
+                    end = min(end, max((lastWordEnd ?? 0) + 0.05, boundary - 0.10))
                 }
                 // 最後の文は、ファイル末尾の余分な無音まで流さず、単語終わり+わずかな余韻で切る
                 // (「最後だけ無音があって違和感」の解消)
@@ -898,10 +901,12 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
 
     private func startTimer() {
         stopTimer()
-        let t = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+        // 細かめ(0.02秒)に監視して、文の切れ目で行き過ぎる量を小さく一定にする
+        // (粗いと速度倍率によって毎回切る位置がばらつき、次の文の頭が漏れて聞こえる)
+        let t = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { [weak self] _ in
             self?.tick()
         }
-        t.tolerance = 0.02
+        t.tolerance = 0.005
         timer = t
     }
 
@@ -931,7 +936,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         } else {
             endPoint = windowEnd(curSeg)
         }
-        if let end = endPoint, player.currentTime >= end - 0.02 {
+        if let end = endPoint, player.currentTime >= end {
             advanceAfterSegment()
             return
         }
