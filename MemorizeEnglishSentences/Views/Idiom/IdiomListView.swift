@@ -24,6 +24,8 @@ struct IdiomListView: View {
     @State private var allIdioms: [Idiom] = []
     /// 意味を表示中のカード番号
     @State private var revealed: Set<Int> = []
+    /// 音声プレイヤー(和訳→英文で連続再生)の表示
+    @State private var showPlayer = false
     /// 選択中の級(セグメント)。未選択時は最初の級
     @AppStorage("idiomSelectedLevel") private var storedLevel = ""
     /// 表示中の元スクショ
@@ -72,6 +74,13 @@ struct IdiomListView: View {
     @State private var didLoad = false
 
     /// 全熟語を一度だけ読み込む(取り込みは起動時に終わっているので以後の再取得は不要)
+    /// この級の熟語を「和訳→英文」の順で連続再生する
+    private func startPlayback() {
+        guard !idioms.isEmpty else { return }
+        IdiomPlayer.shared.stopAll()  // 新しいセッションとして開き直す
+        showPlayer = true
+    }
+
     private func loadIfNeeded() {
         guard !didLoad else { return }
         didLoad = true
@@ -155,6 +164,16 @@ struct IdiomListView: View {
                         }
                     }
                 }
+                // 音声で連続再生(この級の熟語を 和訳→英文 の順で読み上げる)
+                if !idioms.isEmpty {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            startPlayback()
+                        } label: {
+                            Image(systemName: "play.circle.fill").font(.title3)
+                        }
+                    }
+                }
                 // 級の切り替え(複数の級があるときだけ)
                 if levels.count > 1 {
                     ToolbarItem(placement: .principal) {
@@ -176,6 +195,12 @@ struct IdiomListView: View {
             }
             .sheet(item: $selectedWord) { selected in
                 WordPopupView(word: selected.word, meaning: wordMeaning)
+            }
+            .fullScreenCover(isPresented: $showPlayer) {
+                IdiomPlayerView(items: idioms.map {
+                    IdiomPlayer.Item(id: $0.number, phrase: $0.phrase, meaning: $0.meaning,
+                                     en: $0.example, ja: $0.exampleJa)
+                }, startAt: 0)
             }
             .sheet(item: $sourceImage) { item in
                 SourceImageView(image: item.image)
