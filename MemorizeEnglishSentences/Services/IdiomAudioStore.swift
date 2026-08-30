@@ -1,9 +1,9 @@
 import CryptoKit
 import Foundation
 
-/// 熟語タブの音声(和訳=VOICEVOX、英文=edge-tts)を Documents/idiom_audio から読み出す。
+/// 熟語タブの音声(和訳=VOICEVOX、英文=Kokoro TTS af_heart)を Documents/idiom_audio から読み出す。
 /// Claude Code が exampleJa/example のテキストハッシュ名で投入する。
-/// ファイル名: 和訳=<sha256(exampleJa.trim)[:16]>.m4a / 英文=<sha256(example.trim)[:16]>.mp3
+/// ファイル名: 和訳=<sha256(exampleJa.trim)[:16]>.m4a / 英文=<sha256(example.trim)[:16]>.m4a
 enum IdiomAudioStore {
     private static var dir: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -19,9 +19,9 @@ enum IdiomAudioStore {
         let u = dir.appendingPathComponent("\(key(exampleJa)).m4a")
         return FileManager.default.fileExists(atPath: u.path) ? u : nil
     }
-    /// 英文(edge-tts)の音声。無ければ nil
+    /// 英文(Kokoro)の音声。無ければ nil
     static func enURL(_ example: String) -> URL? {
-        let u = dir.appendingPathComponent("\(key(example)).mp3")
+        let u = dir.appendingPathComponent("\(key(example)).m4a")
         return FileManager.default.fileExists(atPath: u.path) ? u : nil
     }
 }
