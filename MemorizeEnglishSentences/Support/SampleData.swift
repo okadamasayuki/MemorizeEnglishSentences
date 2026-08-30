@@ -383,6 +383,20 @@ enum SampleData {
         UserDefaults.standard.set(true, forKey: key)
     }
 
+    /// 暗記の英語音声を Kokoro(.m4a)に切り替えたので、同じブロックの旧 edge-tts(.mp3)を削除する。
+    /// block_audio 内で <hash>.m4a がある <hash>.mp3 だけ消す(音読教材の.mp3は.m4aが無いので残る)。
+    /// これで古い声が絶対に再生されないようにする(BlockAudioStoreは.m4a優先だが念のため実体も消す)。
+    static func removeRedundantBlockMp3IfNeeded() {
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("block_audio")
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(atPath: dir.path) else { return }
+        let m4aStems = Set(files.filter { $0.hasSuffix(".m4a") }.map { String($0.dropLast(4)) })
+        for f in files where f.hasSuffix(".mp3") && m4aStems.contains(String(f.dropLast(4))) {
+            try? fm.removeItem(at: dir.appendingPathComponent(f))
+        }
+    }
+
     /// 暗記タブの並びを番号順(sortIndex)に変えたが、ユーザーは元の並びを好んだので一度だけ元へ戻す。
     /// recall の sortIndex を既定の0に戻し、以降は @Query の元の並び(取り込み時のまま)に任せる。
     /// 一度きり(フラグ済みなら何もしない)なので、この後ユーザーが手で並べ替えたらその並びは保たれる。

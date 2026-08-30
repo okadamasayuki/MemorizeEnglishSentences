@@ -29,6 +29,8 @@ struct RootTabView: View {
             SampleData.removeReadingPassagesIfNeeded(context: context)
             // 暗記タブの並びを番号順に変えたのを取り消し、元の並びへ一度だけ戻す
             SampleData.restoreRecallOrderOnce(context: context)
+            // 暗記の英語音声をKokoro(.m4a)にしたので、旧edge-tts(.mp3)の実体を消して確実にKokoroにする
+            SampleData.removeRedundantBlockMp3IfNeeded()
             SampleData.seedBookPhotosIfNeeded(context: context)
             SampleData.cleanupWordCacheIfNeeded(context: context)
             // 単語タブは廃止。単語データを一度だけ削除する(他タブには影響なし)
