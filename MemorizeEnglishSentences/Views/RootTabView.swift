@@ -81,6 +81,11 @@ struct RootTabView: View {
                 PassageListView(reselectSignal: readingReselect)
                     .miniPlayerHost()
             }
+            // 音読の文章を1文ずつ和訳で並べ、タップで英文を出す自己テスト用タブ
+            Tab("復習", systemImage: "checklist", value: 5) {
+                SentenceReviewView()
+                    .miniPlayerHost()
+            }
             // 例文を音読しながら熟語を覚えるタブ
             Tab("熟語", systemImage: "text.book.closed.fill", value: 3) {
                 IdiomListView()
@@ -88,11 +93,6 @@ struct RootTabView: View {
             }
             Tab("暗記", systemImage: "brain.fill", value: 1) {
                 RecallListView()
-                    .miniPlayerHost()
-            }
-            // 音読の文章を1文ずつ和訳で並べ、タップで英文を出す自己テスト用タブ
-            Tab("復習", systemImage: "checklist", value: 5) {
-                SentenceReviewView()
                     .miniPlayerHost()
             }
             // アプリへの改善要望を書き留めて、Mac の Claude Code へ送るタブ
