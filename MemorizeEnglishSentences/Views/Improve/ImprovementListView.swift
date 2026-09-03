@@ -249,7 +249,8 @@ struct ImprovementListView: View {
 
     private var pendingSection: some View {
         Section {
-            ForEach(store.items) { item in
+            // 上ほど古く、下ほど新しく並べる(古い順=送る順と一致)
+            ForEach(store.items.sorted { $0.createdAt < $1.createdAt }) { item in
                 pendingRow(item)
             }
         } header: {
@@ -339,7 +340,8 @@ struct ImprovementListView: View {
 
     private var resultsSection: some View {
         Section {
-            ForEach(resultStore.results) { result in
+            // 対応済みも上ほど古く、下ほど新しく並べる
+            ForEach(resultStore.results.sorted { $0.completedAt < $1.completedAt }) { result in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(result.title)
                         .font(.subheadline.weight(.semibold))
