@@ -90,6 +90,11 @@ struct RootTabView: View {
                 RecallListView()
                     .miniPlayerHost()
             }
+            // 音読の文章を1文ずつ和訳で並べ、タップで英文を出す自己テスト用タブ
+            Tab("復習", systemImage: "checklist", value: 5) {
+                SentenceReviewView()
+                    .miniPlayerHost()
+            }
             // アプリへの改善要望を書き留めて、Mac の Claude Code へ送るタブ
             Tab("改善", systemImage: "lightbulb", value: 4) {
                 ImprovementListView()
