@@ -25,6 +25,12 @@ struct ImprovementListView: View {
     @State private var dictationBase = ""
     /// いま Mac へ送っている最中の項目。行に回転を出して二度押しを防ぐ
     @State private var sendingIDs: Set<UUID> = []
+    /// 一括送信の実行中(ボタンの二度押しを防ぐ)
+    @State private var batchSending = false
+    /// 選択モード(複数選んでまとめて送るための状態)
+    @State private var selectMode = false
+    /// 選択された項目
+    @State private var selectedIDs: Set<UUID> = []
     /// 送れなかったときの説明
     @State private var errorMessage: String?
     /// 編集中の項目
@@ -242,15 +248,49 @@ struct ImprovementListView: View {
     // MARK: - まだ送っていない項目
 
     private var pendingSection: some View {
-        Section("これから") {
+        Section {
             ForEach(store.items) { item in
                 pendingRow(item)
+            }
+        } header: {
+            // 見出しの右端に一括送信の操作。ワンクリックで古い順に全部送れる。
+            // 「選択」を押すと複数選んでまとめて送るモードに入る。
+            HStack {
+                Text("これから\(store.items.count > 0 ? "(\(store.items.count))" : "")")
+                Spacer()
+                if selectMode {
+                    Button(selectedIDs.isEmpty ? "送信" : "\(selectedIDs.count)件を送信") {
+                        sendSelected()
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.green)
+                    .disabled(selectedIDs.isEmpty || batchSending)
+                    .textCase(nil)
+                    Button("やめる") { selectMode = false; selectedIDs = [] }
+                        .font(.caption)
+                        .textCase(nil)
+                } else {
+                    Button("全て送信") { sendAll() }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.green)
+                        .disabled(batchSending)
+                        .textCase(nil)
+                    Button("選択") { selectMode = true }
+                        .font(.caption)
+                        .textCase(nil)
+                }
             }
         }
     }
 
     private func pendingRow(_ item: Improvement) -> some View {
         HStack(spacing: 10) {
+            // 選択モードのときだけ、行の左にチェックを出す
+            if selectMode {
+                Image(systemName: selectedIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(selectedIDs.contains(item.id) ? Color.accentColor : Color.secondary)
+            }
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.text)
                 HStack(spacing: 6) {
@@ -268,10 +308,15 @@ struct ImprovementListView: View {
             }
         }
         .contentShape(Rectangle())
-        // 行を押したら書き直せる。聞き取りの間違いをここで直す
+        // 選択モード中はタップで選択の入り切り。ふだんはタップで書き直し
         .onTapGesture {
-            editText = item.text
-            editTarget = item
+            if selectMode {
+                if selectedIDs.contains(item.id) { selectedIDs.remove(item.id) }
+                else { selectedIDs.insert(item.id) }
+            } else {
+                editText = item.text
+                editTarget = item
+            }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             Button {
@@ -459,6 +504,54 @@ struct ImprovementListView: View {
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
             sendingIDs.remove(item.id)
+        }
+    }
+
+    /// これからの項目を「古い順」にすべて送る(ワンクリック一括)
+    private func sendAll() {
+        sendBatch(store.items.sorted { $0.createdAt < $1.createdAt })
+    }
+
+    /// 選択した項目だけを「古い順」にまとめて送る
+    private func sendSelected() {
+        let ordered = store.items
+            .filter { selectedIDs.contains($0.id) }
+            .sorted { $0.createdAt < $1.createdAt }
+        sendBatch(ordered)
+        selectMode = false
+        selectedIDs = []
+    }
+
+    /// 渡された順に一つずつ Mac へ送る。送れたものはその場で消し、
+    /// 一件でも届かなければ(Mac が点いていない等)そこで止める。
+    private func sendBatch(_ items: [Improvement]) {
+        guard !items.isEmpty, !batchSending else { return }
+        batchSending = true
+        let host = improveHost
+        Task { @MainActor in
+            var sentAny = false
+            for item in items {
+                // 途中で消えた・すでに送信中の項目は飛ばす
+                guard store.items.contains(where: { $0.id == item.id }),
+                      !sendingIDs.contains(item.id) else { continue }
+                sendingIDs.insert(item.id)
+                do {
+                    try await MacLink.send(item, host: host)
+                    store.remove(item.id)
+                    reachable = true
+                    sentAny = true
+                } catch {
+                    errorMessage = error.localizedDescription
+                    reachable = false
+                    sendingIDs.remove(item.id)
+                    UINotificationFeedbackGenerator().notificationOccurred(.error)
+                    batchSending = false
+                    return
+                }
+                sendingIDs.remove(item.id)
+            }
+            batchSending = false
+            if sentAny { UINotificationFeedbackGenerator().notificationOccurred(.success) }
         }
     }
 
