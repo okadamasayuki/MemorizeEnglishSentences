@@ -29,8 +29,8 @@ struct ImprovementListView: View {
     @State private var batchSending = false
     /// 選択モード(複数選んでまとめて送るための状態)
     @State private var selectMode = false
-    /// 選択された項目
-    @State private var selectedIDs: Set<UUID> = []
+    /// 選択された項目。押した順を保つため配列で持つ(1番→2番…の順に送る)
+    @State private var selectedOrder: [UUID] = []
     /// 送れなかったときの説明
     @State private var errorMessage: String?
     /// 編集中の項目
@@ -260,14 +260,14 @@ struct ImprovementListView: View {
                 Text("これから\(store.items.count > 0 ? "(\(store.items.count))" : "")")
                 Spacer()
                 if selectMode {
-                    Button(selectedIDs.isEmpty ? "送信" : "\(selectedIDs.count)件を送信") {
+                    Button(selectedOrder.isEmpty ? "送信" : "\(selectedOrder.count)件を送信") {
                         sendSelected()
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.green)
-                    .disabled(selectedIDs.isEmpty || batchSending)
+                    .disabled(selectedOrder.isEmpty || batchSending)
                     .textCase(nil)
-                    Button("やめる") { selectMode = false; selectedIDs = [] }
+                    Button("やめる") { selectMode = false; selectedOrder = [] }
                         .font(.caption)
                         .textCase(nil)
                 } else {
@@ -286,11 +286,21 @@ struct ImprovementListView: View {
 
     private func pendingRow(_ item: Improvement) -> some View {
         HStack(spacing: 10) {
-            // 選択モードのときだけ、行の左にチェックを出す
+            // 選択モードのときだけ、行の左に「押した順の番号」を出す。
+            // 未選択は空の丸。選択済みは 1・2・3… の番号バッジ(この順に送る)
             if selectMode {
-                Image(systemName: selectedIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(selectedIDs.contains(item.id) ? Color.accentColor : Color.secondary)
+                if let idx = selectedOrder.firstIndex(of: item.id) {
+                    Text("\(idx + 1)")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(Color.accentColor))
+                } else {
+                    Image(systemName: "circle")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                }
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.text)
@@ -312,8 +322,12 @@ struct ImprovementListView: View {
         // 選択モード中はタップで選択の入り切り。ふだんはタップで書き直し
         .onTapGesture {
             if selectMode {
-                if selectedIDs.contains(item.id) { selectedIDs.remove(item.id) }
-                else { selectedIDs.insert(item.id) }
+                // もう一度押したら選択を外して、残りの番号を繰り上げる
+                if let idx = selectedOrder.firstIndex(of: item.id) {
+                    selectedOrder.remove(at: idx)
+                } else {
+                    selectedOrder.append(item.id)
+                }
             } else {
                 editText = item.text
                 editTarget = item
@@ -514,14 +528,12 @@ struct ImprovementListView: View {
         sendBatch(store.items.sorted { $0.createdAt < $1.createdAt })
     }
 
-    /// 選択した項目だけを「古い順」にまとめて送る
+    /// 選択した項目を「押した順(1番→2番…)」にまとめて送る
     private func sendSelected() {
-        let ordered = store.items
-            .filter { selectedIDs.contains($0.id) }
-            .sorted { $0.createdAt < $1.createdAt }
+        let ordered = selectedOrder.compactMap { id in store.items.first { $0.id == id } }
         sendBatch(ordered)
         selectMode = false
-        selectedIDs = []
+        selectedOrder = []
     }
 
     /// 渡された順に一つずつ Mac へ送る。送れたものはその場で消し、
