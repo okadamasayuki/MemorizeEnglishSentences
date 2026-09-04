@@ -163,7 +163,7 @@ struct ImprovementListView: View {
                 .tint(dictation.isRecording ? .red : Color.accentColor)
 
                 // 写真・動画の添付(スクショでの報告用)
-                PhotosPicker(selection: $pickedItems, maxSelectionCount: 3,
+                PhotosPicker(selection: $pickedItems, maxSelectionCount: 100,
                              matching: .any(of: [.images, .videos])) {
                     Image(systemName: "photo.on.rectangle")
                         .font(.footnote.weight(.semibold))

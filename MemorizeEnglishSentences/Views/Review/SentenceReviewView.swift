@@ -24,7 +24,7 @@ struct SentenceReviewView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if visiblePassages.isEmpty {
+                if visibleSentences.isEmpty {
                     ContentUnavailableView(
                         hideMemorized ? "未チェックの文はありません" : "文がありません",
                         systemImage: hideMemorized ? "checkmark.circle" : "text.book.closed",
@@ -56,15 +56,12 @@ struct SentenceReviewView: View {
 
     private var list: some View {
         List {
-            ForEach(visiblePassages) { p in
-                Section(p.title) {
-                    ForEach(p.visible(hideMemorized: hideMemorized, store: store)) { s in
-                        row(s)
-                    }
-                }
+            // 見出し(章タイトル)は出さず、全文をフラットに1文ずつ並べる
+            ForEach(visibleSentences) { s in
+                row(s)
             }
         }
-        .listStyle(.insetGrouped)
+        .listStyle(.plain)
     }
 
     private func row(_ s: ReviewSentence) -> some View {
@@ -102,10 +99,10 @@ struct SentenceReviewView: View {
         .padding(.vertical, 2)
     }
 
-    /// 表示するべき文章(フィルター中は、見せる文が1つも無い文章は出さない)
-    private var visiblePassages: [PassageSentences] {
-        guard hideMemorized else { return built }
-        return built.filter { !$0.visible(hideMemorized: true, store: store).isEmpty }
+    /// 全文をフラットに並べる(フィルター中は覚えた文を除く)
+    private var visibleSentences: [ReviewSentence] {
+        let all = built.flatMap(\.sentences)
+        return hideMemorized ? all.filter { !store.isMemorized($0.id) } : all
     }
 
     /// 文章→文ごとのペアを一度だけ組み立てる。
