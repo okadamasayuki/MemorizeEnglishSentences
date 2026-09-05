@@ -239,6 +239,9 @@ final class SpeechSynthesisService: NSObject, ObservableObject, AVSpeechSynthesi
 
     func stop() {
         playGeneration += 1     // 予約済みの遅延再生を無効化
+        // 実際に喋っていた/連続再生中だった時だけセッションを手放す。
+        // (他プレイヤーが開始時に空振りで呼ぶ場合に、直後の有効化と競合させない)
+        let wasActive = synthesizer.isSpeaking || synthesizer.isPaused || isPlayingSequence
         currentUtterance = nil
         if synthesizer.isSpeaking || synthesizer.isPaused {
             synthesizer.stopSpeaking(at: .immediate)
@@ -251,6 +254,7 @@ final class SpeechSynthesisService: NSObject, ObservableObject, AVSpeechSynthesi
         sequenceTexts = []
         currentIndex = 0
         sequenceVoiceID = nil
+        if wasActive { AudioSessionHelper.releaseIfIdle() }
     }
 
     /// 再生用にオーディオセッションを整える(録音中は触らない)

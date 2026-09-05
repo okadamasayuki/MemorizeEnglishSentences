@@ -72,6 +72,7 @@ final class StudyWordPlayer: NSObject, ObservableObject {
     func pause() {
         isPlaying = false
         cancelChain()
+        AudioSessionHelper.releaseIfIdle()
     }
 
     func toggle() { isPlaying ? pause() : play() }
@@ -93,6 +94,7 @@ final class StudyWordPlayer: NSObject, ObservableObject {
         isPlaying = false
         sessionActive = false
         cancelChain()
+        AudioSessionHelper.releaseIfIdle()
     }
 
     // MARK: - 連鎖(英→和→英→次へ)

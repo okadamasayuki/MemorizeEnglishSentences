@@ -101,6 +101,10 @@ final class SpeechRecognitionService {
         request?.endAudio()
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
+        // セッション解放を非同期の最終コールバック待ちにせず、その場で確実に片付ける
+        // (マイク+録音セッションが起動したまま残って発熱・電池消費するのを防ぐ)。
+        // cleanup() は冪等なので、後からコールバックが来て再度呼ばれても問題ない。
+        cleanup()
     }
 
     // MARK: - Private
