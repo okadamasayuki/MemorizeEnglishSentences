@@ -48,9 +48,6 @@ struct ImprovementListView: View {
 
     @FocusState private var editFocused: Bool
 
-    /// アプリが背面/離脱したら録音を止めるための監視
-    @Environment(\.scenePhase) private var scenePhase
-
     var body: some View {
         NavigationStack {
             List {
@@ -71,12 +68,6 @@ struct ImprovementListView: View {
             .onAppear {
                 checkReachability()
                 resultStore.reload()
-            }
-            // 改善タブを離れたら録音を止める(マイク+音声認識が回り続けて発熱・電池消費するのを防ぐ)
-            .onDisappear { stopDictationIfNeeded() }
-            // アプリが背面(ロック含む)/非アクティブになったら録音を止める
-            .onChange(of: scenePhase) { _, phase in
-                if phase != .active { stopDictationIfNeeded() }
             }
             // 動作検証用: memoeng://improve/mic で書き取りを開始/終了できる
             // (シミュレーターで音声入力の消失を自動再現するのに使う)
@@ -433,16 +424,6 @@ struct ImprovementListView: View {
 
     /// 書き取りのために一時停止したか(終わったら自動で再開する)
     @State private var pausedPlayerForDictation = false
-
-    /// 録音中なら自動再起動を切ってから確実に止める(タブ離脱・背面移行時に呼ぶ)。
-    /// 聞き取れていた分は下書きへ写して失わないようにする。
-    private func stopDictationIfNeeded() {
-        guard dictation.isRecording else { return }
-        dictation.autoRestart = false
-        dictation.stop()
-        syncDraftFromDictation()
-        resumePlayerIfNeeded()
-    }
 
     private func toggleDictation() {
         if dictation.isRecording {
