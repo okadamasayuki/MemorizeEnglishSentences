@@ -486,12 +486,16 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         stopTimer()
         isPaused = true
         updateNowPlaying()
+        // 一時停止中はアプリが休止できるようセッションを手放す(発熱・電池消費対策)
+        deactivatePlaybackSession()
     }
 
     /// 再開(止めたところから)
     func resume() {
         guard isPlayingSequence, isPaused else { return }
         isPaused = false
+        // 一時停止で手放したセッションを取り直す
+        activatePlaybackSession()
         if isSpeakingJa {
             if let jaPlayer {
                 jaPlayer.play()
@@ -535,6 +539,8 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         curRep = 0
         source = nil
         updateNowPlaying()
+        // 停止したらセッションを手放し、アプリが休止できるようにする(発熱・電池消費対策)
+        deactivatePlaybackSession()
     }
 
     // MARK: - 内部
@@ -993,6 +999,17 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
             try? session.setCategory(.playback, mode: .spokenAudio, options: [])
         }
         try? session.setActive(true, options: [])
+    }
+
+    /// オーディオセッションを手放す。
+    /// バックグラウンド再生を有効(Info.plist の UIBackgroundModes: audio)にしているため、
+    /// セッションを有効にしたままだと停止・一時停止中もアプリが休止(サスペンド)されず、
+    /// オーディオ回路が起動したままになって発熱・電池消費の原因になる。
+    /// 停止・一時停止のたびに手放し、再開時に activatePlaybackSession() で取り直す。
+    private func deactivatePlaybackSession() {
+        // 録音中や他の音声(単語・熟語・和訳TTS)が鳴っている時に横取りして切らない
+        guard !SpeechRecognitionService.isAnyRecording else { return }
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 
     // MARK: - AVAudioPlayerDelegate
