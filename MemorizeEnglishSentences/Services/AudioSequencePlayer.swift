@@ -514,6 +514,10 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     }
 
     func stop() {
+        // 実際に再生していた時だけ最後にセッションを手放す。
+        // (start() が最初に stop() を呼ぶため、再生前の空振りで無効化→即再有効化して
+        //  再生開始が遅れる=タイムラグになるのを防ぐ)
+        let wasActive = isPlayingSequence
         cancelJaSpeech()
         player?.stop()
         player = nil
@@ -539,8 +543,9 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         curRep = 0
         source = nil
         updateNowPlaying()
-        // 停止したらセッションを手放し、アプリが休止できるようにする(発熱・電池消費対策)
-        deactivatePlaybackSession()
+        // 停止したらセッションを手放し、アプリが休止できるようにする(発熱・電池消費対策)。
+        // ただし元々再生していなかった時(start からの空振り stop 等)は触らない。
+        if wasActive { deactivatePlaybackSession() }
     }
 
     // MARK: - 内部
