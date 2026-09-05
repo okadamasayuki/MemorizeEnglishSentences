@@ -12,4 +12,20 @@ enum AudioSessionHelper {
         guard !SpeechRecognitionService.isAnyRecording else { return }
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
+
+    /// アプリがバックグラウンド(ロック含む)へ移った時に呼ぶ。
+    /// どのプレイヤーも実際には鳴っておらず、録音もしていない=完全にアイドルな時だけ
+    /// セッションを手放して、アプリが休止(サスペンド)できるようにする(発熱・電池消費対策)。
+    /// 前面にいる間は手放さないので、再生ボタンの反応は速いまま保たれる。
+    @MainActor
+    static func releaseIfBackgroundIdle() {
+        if SpeechRecognitionService.isAnyRecording { return }              // 録音継続中は維持
+        let seq = AudioSequencePlayer.shared
+        if seq.isPlayingSequence && !seq.isPaused { return }               // 音読/暗記の実再生中は維持
+        if StudyWordPlayer.shared.isPlaying { return }                     // 単語学習の再生中は維持
+        if IdiomPlayer.shared.isPlaying { return }                         // 熟語の再生中は維持
+        let tts = SpeechSynthesisService.shared
+        if tts.isPlayingSequence && !tts.isPaused { return }               // TTS連続再生中は維持
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+    }
 }

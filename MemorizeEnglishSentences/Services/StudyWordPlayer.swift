@@ -70,10 +70,8 @@ final class StudyWordPlayer: NSObject, ObservableObject {
     var currentMeaning: String { words.indices.contains(index) ? words[index].meaning : "" }
 
     func pause() {
-        let wasActive = isPlaying || sessionActive
         isPlaying = false
         cancelChain()
-        if wasActive { AudioSessionHelper.releaseIfIdle() }
     }
 
     func toggle() { isPlaying ? pause() : play() }
@@ -92,11 +90,9 @@ final class StudyWordPlayer: NSObject, ObservableObject {
     func prev() { jump(to: max(0, index - 1)) }
 
     func stopAll() {
-        let wasActive = isPlaying || sessionActive
         isPlaying = false
         sessionActive = false
         cancelChain()
-        if wasActive { AudioSessionHelper.releaseIfIdle() }
     }
 
     // MARK: - 連鎖(英→和→英→次へ)

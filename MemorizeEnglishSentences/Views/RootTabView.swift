@@ -3,6 +3,8 @@ import SwiftUI
 
 struct RootTabView: View {
     @Environment(\.modelContext) private var context
+    /// アプリがバックグラウンドへ移ったらアイドル時にオーディオセッションを手放すための監視
+    @Environment(\.scenePhase) private var scenePhase
     /// 選択中のタブ
     @State private var selection = 0
     /// 音読タブが再タップされた回数(前回位置に戻すシグナル)
@@ -20,6 +22,11 @@ struct RootTabView: View {
             if url.host() == "tab", let value = Int(url.lastPathComponent) {
                 selection = value
             }
+        }
+        // バックグラウンド(ロック含む)へ移り、かつ再生も録音もしていない完全アイドルの時だけ
+        // オーディオセッションを手放す。前面では手放さないので再生ボタンの反応は速いまま。
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { AudioSessionHelper.releaseIfBackgroundIdle() }
         }
         .task {
             // 一度きりの初期化・移行(フラグ済みなら即 return で軽い)

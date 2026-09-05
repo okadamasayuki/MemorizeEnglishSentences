@@ -64,11 +64,7 @@ final class IdiomPlayer: NSObject, ObservableObject {
         isPlaying = true
         speakCurrent()
     }
-    func pause() {
-        let wasActive = isPlaying || sessionActive
-        isPlaying = false; cancelChain()
-        if wasActive { AudioSessionHelper.releaseIfIdle() }
-    }
+    func pause() { isPlaying = false; cancelChain() }
     func toggle() { isPlaying ? pause() : play() }
     func jump(to i: Int) {
         cancelChain()
@@ -79,11 +75,9 @@ final class IdiomPlayer: NSObject, ObservableObject {
     func next() { jump(to: min(items.count - 1, index + 1)) }
     func prev() { jump(to: max(0, index - 1)) }
     func stopAll() {
-        let wasActive = isPlaying || sessionActive
         isPlaying = false
         sessionActive = false
         cancelChain()
-        if wasActive { AudioSessionHelper.releaseIfIdle() }
     }
 
     // MARK: - 連鎖(和訳→英文→次へ)
