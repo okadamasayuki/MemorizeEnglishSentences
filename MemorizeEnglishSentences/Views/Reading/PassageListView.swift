@@ -115,7 +115,8 @@ struct PassageListView: View {
             let keys = audioTargets.map { playbackKey(for: $0) }
             let startIndex = startKey.flatMap { keys.firstIndex(of: $0) } ?? 0
             playerKeys = keys
-            audioPlayer.start(items: items, startAt: startIndex, speed: listenSpeed, source: .reading)
+            // 音読タブは最後のブロックまで再生したら先頭へ戻って連続再生する
+            audioPlayer.start(items: items, startAt: startIndex, speed: listenSpeed, source: .reading, loop: true)
             showAudioPlayer = true
             return
         }

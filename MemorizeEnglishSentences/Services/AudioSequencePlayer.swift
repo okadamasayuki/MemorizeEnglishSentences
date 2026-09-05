@@ -137,6 +137,8 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
 
     private var items: [AudioPlaybackItem] = []
     private var currentIndex = 0
+    /// 最後のブロックまで再生したら先頭のブロックへ戻って再生を続けるか(音読タブの連続再生)
+    private var loopSequence = false
     private var player: AVAudioPlayer?
     private var timer: Timer?
     private var speed: Double = 1.0
@@ -335,7 +337,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
     }
 
     /// 連続再生を開始する(startAt番目から)
-    func start(items: [AudioPlaybackItem], startAt: Int, speed: Double, source: Source = .reading) {
+    func start(items: [AudioPlaybackItem], startAt: Int, speed: Double, source: Source = .reading, loop: Bool = false) {
         stop()
         SpeechSynthesisService.shared.stop()  // TTSと同時再生しない
         StudyWordPlayer.shared.stopAll()      // 単語学習の音声とも二重再生しない
@@ -343,6 +345,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         self.source = source
         self.items = items
         self.speed = speed
+        self.loopSequence = loop
         jaAfterSentence = UserDefaults.standard.bool(forKey: "audioJaAfterSentence")
         currentIndex = min(max(0, startAt), items.count - 1)
         isPlayingSequence = true
@@ -513,6 +516,7 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
         stopTimer()
         isPlayingSequence = false
         isPaused = false
+        loopSequence = false
         sequenceIndex = nil
         currentSentence = nil
         highlight.range = nil
@@ -548,6 +552,19 @@ final class AudioSequencePlayer: NSObject, ObservableObject, AVAudioPlayerDelega
                 return
             }
             currentIndex += 1  // 全文スキップ設定のブロック
+        }
+        // 最後のブロックまで到達。連続再生(ループ)なら先頭へ戻ってもう一巡する。
+        // 1件も再生できるブロックが無い(全部スキップ)場合は無限ループを避けて終了する。
+        if loopSequence, !items.isEmpty {
+            currentIndex = 0
+            while items.indices.contains(currentIndex) {
+                buildSchedule()
+                if let first = nextScheduled(from: 0) {
+                    startFile(atSegment: first)
+                    return
+                }
+                currentIndex += 1
+            }
         }
         stop()
     }
