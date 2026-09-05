@@ -2,8 +2,8 @@ import SwiftData
 import SwiftUI
 import Translation
 
-/// タイトルを見て英文全文を音声で回答、または「答えを見る」。
-/// タイトルはタップで編集でき、習熟ステータス(要復習/どちらでもない/覚えた!)を登録できる。
+/// タイトル(和訳)を見て英文を思い出し、タップで「答え(英文)」を表示する暗記練習。
+/// 習熟ステータス(要復習/覚えた!)を登録でき、単語長押しで和訳+発音が出る。
 struct RecallSessionView: View {
     @Environment(\.modelContext) private var context
 
@@ -34,11 +34,7 @@ struct RecallSessionView: View {
     /// ページングスクロールの現在位置(落ち着くと更新される)
     @State private var scrollID: Int?
 
-    @State private var speech = SpeechRecognitionService()
     @State private var showAnswer = false
-    @State private var resultAttempt: RecallAttempt?
-    @State private var showResult = false
-
 
     // 単語長押しで和訳+発音
     @State private var selectedWord: SelectedWord?
@@ -59,76 +55,43 @@ struct RecallSessionView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // 音読タブのプレイヤーと同じ、指に最後まで追従するページングスクロールで
-            // 前後の文章へ移動する(TabView(.page)の「半分で確定・引き戻し」を避ける)。
-            // 表示中と左右1ページ以外は空にして軽くする(音声入力中の再描画で顕著に効く)
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: 0) {
-                    ForEach(pages.indices, id: \.self) { index in
-                        Group {
-                            if abs(index - pageIndex) <= 1 {
-                                pageView(pages[index])
-                            } else {
-                                Color.clear
-                            }
+        // 音読タブのプレイヤーと同じ、指に最後まで追従するページングスクロールで
+        // 前後の文章へ移動する(TabView(.page)の「半分で確定・引き戻し」を避ける)。
+        // 表示中と左右1ページ以外は空にして軽くする
+        ScrollView(.horizontal) {
+            LazyHStack(spacing: 0) {
+                ForEach(pages.indices, id: \.self) { index in
+                    Group {
+                        if abs(index - pageIndex) <= 1 {
+                            pageView(pages[index])
+                        } else {
+                            Color.clear
                         }
-                        .containerRelativeFrame(.horizontal)
                     }
-                }
-                .scrollTargetLayout()
-            }
-            .scrollTargetBehavior(.paging)
-            .scrollIndicators(.hidden)
-            .scrollPosition(id: $scrollID)
-            // 指が触れている間・慣性中は切り替えず、完全に止まってからその文章へ移す
-            .onScrollPhaseChange { _, newPhase in
-                guard newPhase == .idle, let id = scrollID, pages.indices.contains(id) else { return }
-                if id != pageIndex {
-                    pageIndex = id
-                    selectedID = pages[id].persistentModelID
+                    .containerRelativeFrame(.horizontal)
                 }
             }
-            .onChange(of: selectedID) {
-                // ページが替わったら回答・答えをリセットして認識バイアスを合わせ直す。
-                // 外から selectedID が変わった場合はスクロール位置も追従させる
-                if let idx = pages.firstIndex(where: { $0.persistentModelID == selectedID }), idx != pageIndex {
-                    pageIndex = idx
-                    withAnimation(.easeInOut(duration: 0.25)) { scrollID = idx }
-                }
-                speech.stop()
-                speech.reset()
-                showAnswer = false
-                configureSpeech()
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.paging)
+        .scrollIndicators(.hidden)
+        .scrollPosition(id: $scrollID)
+        // 指が触れている間・慣性中は切り替えず、完全に止まってからその文章へ移す
+        .onScrollPhaseChange { _, newPhase in
+            guard newPhase == .idle, let id = scrollID, pages.indices.contains(id) else { return }
+            if id != pageIndex {
+                pageIndex = id
+                selectedID = pages[id].persistentModelID
             }
-
-            HStack(spacing: 44) {
-                Spacer()
-                // 言い直し(認識テキストを消して最初から)
-                Button {
-                    speech.restartClean()
-                } label: {
-                    Image(systemName: "arrow.counterclockwise.circle.fill")
-                        .font(.system(size: 46))
-                        .foregroundStyle(speech.fullText.isEmpty ? Color(.systemGray3) : Color.orange)
-                }
-                .buttonStyle(.borderless)
-                .disabled(speech.fullText.isEmpty)
-                // 音声で回答
-                DictationButton(speech: speech, iconOnly: true)
-                // 回答を確定して採点
-                Button {
-                    confirmAnswer()
-                } label: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 46))
-                        .foregroundStyle(currentAnswer.isEmpty ? Color(.systemGray3) : Color.green)
-                }
-                .buttonStyle(.borderless)
-                .disabled(currentAnswer.isEmpty)
-                Spacer()
+        }
+        .onChange(of: selectedID) {
+            // ページが替わったら答えの表示をリセットする。
+            // 外から selectedID が変わった場合はスクロール位置も追従させる
+            if let idx = pages.firstIndex(where: { $0.persistentModelID == selectedID }), idx != pageIndex {
+                pageIndex = idx
+                withAnimation(.easeInOut(duration: 0.25)) { scrollID = idx }
             }
-            .padding()
+            showAnswer = false
         }
         // ステータスに合わせて背景色をうっすら変える(どちらでもない = 色なし)
         .background(
@@ -151,18 +114,6 @@ struct RecallSessionView: View {
                         Image(systemName: "photo")
                     }
                 }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                NavigationLink {
-                    MistakeAnalysisView(passage: passage)
-                } label: {
-                    Label("分析", systemImage: "chart.bar.fill")
-                }
-            }
-        }
-        .navigationDestination(isPresented: $showResult) {
-            if let resultAttempt {
-                RecallDiffView(attempt: resultAttempt)
             }
         }
         .sheet(item: $selectedWord) { selected in
@@ -224,10 +175,8 @@ struct RecallSessionView: View {
                 pageIndex = idx
                 scrollID = idx
             }
-            configureSpeech()
         }
         .onDisappear {
-            speech.stop()
             try? context.save()
         }
     }
@@ -266,20 +215,6 @@ struct RecallSessionView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-
-                if !speech.fullText.isEmpty || speech.isRecording {
-                    Text(speech.fullText.isEmpty ? "..." : speech.fullText)
-                        .font(.title3)
-                        .lineSpacing(4)
-                        .foregroundStyle(speech.isRecording ? .primary : .secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                if let error = speech.errorMessage {
-                    Text(error)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                }
             }
             .padding()
         }
@@ -307,23 +242,6 @@ struct RecallSessionView: View {
         .buttonStyle(.borderless)
         .animation(.easeInOut(duration: 0.15), value: isSelected)
     }
-
-    private var currentAnswer: String {
-        speech.fullText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// 現在の文章に合わせて音声認識を設定する
-    private func configureSpeech() {
-        // 長文ディクテーション: final 後に自動再開してセグメント連結
-        speech.autoRestart = true
-        // 正解英文の単語を認識バイアスとして渡し、正解に寄せて聞き取る
-        let words = WordTokenizer.tokenize(referenceText)
-            .map(\.normalized)
-            .filter { $0.count >= 2 }
-        speech.contextualStrings = Array(Set(words)).sorted()
-    }
-
-
 
     /// 単語の意味を表示。Claude Code が事前生成した「この文中での意味」を最優先し、
     /// キャッシュにない単語は従来手段(内蔵辞書 → キャッシュ → Apple 翻訳)で解決する
@@ -375,31 +293,5 @@ struct RecallSessionView: View {
             context.insert(WordCacheEntry(word: target, japanese: translation))
         }
         try? context.save()
-    }
-
-    private func confirmAnswer() {
-        speech.stop()
-        let answer = currentAnswer
-        guard !answer.isEmpty else { return }
-
-        let refTokens = WordTokenizer.tokenize(referenceText)
-        let hypTokens = WordTokenizer.tokenize(answer)
-        let diff = DiffService.diff(
-            reference: refTokens.map(\.normalized),
-            hypothesis: hypTokens.map(\.normalized)
-        )
-
-        let attempt = RecallAttempt(
-            recognizedText: answer,
-            opsJSON: DiffService.encode(diff),
-            accuracy: diff.accuracy
-        )
-        attempt.passage = passage
-        context.insert(attempt)
-        try? context.save()
-
-        speech.reset()
-        resultAttempt = attempt
-        showResult = true
     }
 }
